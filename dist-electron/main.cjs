@@ -25,8 +25,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 // electron/main.ts
 var import_electron = require("electron");
 var import_path = __toESM(require("path"), 1);
-var Store = require("electron-store");
-var store = new Store({
+var import_electron_store = __toESM(require("electron-store"), 1);
+var store = new import_electron_store.default({
   schema: {
     databasePath: { type: "string" },
     windowBounds: {
