@@ -12,12 +12,6 @@ if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
-// Ensure server directory exists in dist-electron
-const serverDir = join(__dirname, 'dist-electron', 'server');
-if (!fs.existsSync(serverDir)) {
-  fs.mkdirSync(serverDir, { recursive: true });
-}
-
 // Build main process
 await esbuild.build({
   entryPoints: ['electron/main.ts'],
@@ -29,8 +23,7 @@ await esbuild.build({
     'electron',
     'better-sqlite3',
     'electron-store',
-    './server/*',
-    '../server/*',
+    '../dist/*',
     'vite',
     '@vitejs/plugin-react',
     '@replit/*'
@@ -49,13 +42,14 @@ await esbuild.build({
   packages: 'external',
 });
 
-// Build server for electron (ESM format to match main.ts import)
+// Build server for electron to dist/ so path resolution works correctly
+// (server uses import.meta.dirname + "public" which expects to be in dist/)
 await esbuild.build({
   entryPoints: ['server/index.ts'],
   bundle: true,
   platform: 'node',
   format: 'esm',
-  outfile: 'dist-electron/server/index.js',
+  outfile: 'dist/index.js',
   external: [
     'better-sqlite3',
     'express',
