@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "path";
+import { pathToFileURL } from "url";
 import fs from "fs";
 
 // Initialize electron-store for persisting user settings
@@ -65,7 +66,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    title: "PaintPulse v1.2 FIXED - Paint Store Management",
+    title: "PaintPulse v1.3 COMPLETE - Paint Store Management",
     show: false, // Don't show until ready-to-show event
   });
   
@@ -176,6 +177,9 @@ ipcMain.handle("set-activation-status", (_event, status: boolean) => {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // ✅ Set production mode for packaged app
+  process.env.NODE_ENV = "production";
+  
   // ✅ CRITICAL FIX: Initialize electron-store with dynamic import
   const { default: ElectronStore } = await import("electron-store");
   store = new ElectronStore<StoreType>({
@@ -207,8 +211,9 @@ app.whenReady().then(async () => {
   // Set database path in server module
   process.env.DATABASE_PATH = dbPath;
   
-  // Start Express server
-  const serverModule = await import("../server/index.js");
+  // ✅ Start Express server (built to dist/index.js for correct path resolution)
+  const serverPath = path.join(__dirname, "..", "dist", "index.js");
+  const serverModule = await import(pathToFileURL(serverPath).href);
   
   createWindow();
   
