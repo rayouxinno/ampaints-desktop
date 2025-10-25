@@ -1,6 +1,9 @@
 {
-  "name": "rest-express",
+  "name": "ampaints-paintpulse",
   "version": "1.0.0",
+  "description": "AMPaints PaintPulse - Paint Store POS and Inventory Management System",
+  "author": "AMPaints",
+  "main": "dist-electron/main.cjs",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -8,7 +11,9 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "build:electron": "node build-electron.js",
+    "package:win": "electron-builder --win --x64"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -53,8 +58,6 @@
     "date-fns": "^3.6.0",
     "drizzle-orm": "^0.39.1",
     "drizzle-zod": "^0.7.0",
-    "electron": "^38.4.0",
-    "electron-builder": "^26.0.12",
     "electron-store": "^11.0.2",
     "embla-carousel-react": "^8.6.0",
     "express": "^4.21.2",
@@ -101,6 +104,8 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.4",
+    "electron": "^38.4.0",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
