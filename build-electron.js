@@ -12,6 +12,12 @@ if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
+// Ensure server directory exists in dist-electron
+const serverDir = join(__dirname, 'dist-electron', 'server');
+if (!fs.existsSync(serverDir)) {
+  fs.mkdirSync(serverDir, { recursive: true });
+}
+
 // Build main process
 await esbuild.build({
   entryPoints: ['electron/main.ts'],
@@ -40,6 +46,21 @@ await esbuild.build({
   format: 'cjs',
   outfile: 'dist-electron/preload.cjs',
   external: ['electron'],
+  packages: 'external',
+});
+
+// Build server for electron (ESM format to match main.ts import)
+await esbuild.build({
+  entryPoints: ['server/index.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  outfile: 'dist-electron/server/index.js',
+  external: [
+    'better-sqlite3',
+    'express',
+    'ws'
+  ],
   packages: 'external',
 });
 
