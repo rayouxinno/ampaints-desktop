@@ -2,8 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "path";
 import fs from "fs";
 
-// Use require for electron-store to avoid CommonJS interop issues
-const Store = require("electron-store");
+// Use dynamic import for electron-store ESM module
+import ElectronStore from "electron-store";
 
 // Initialize electron-store for persisting user settings
 interface StoreType {
@@ -12,7 +12,7 @@ interface StoreType {
   isActivated?: boolean;
 }
 
-const store = new Store<StoreType>({
+const store = new ElectronStore<StoreType>({
   schema: {
     databasePath: { type: 'string' },
     windowBounds: {
