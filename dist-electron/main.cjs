@@ -3,7 +3,9 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const ElectronStore = require("electron-store");
+// Fix electron-store ESM import for electron-store v11+
+const ElectronStoreModule = require("electron-store");
+const ElectronStore = ElectronStoreModule.default || ElectronStoreModule;
 
 // Initialize electron-store
 const store = new ElectronStore({
@@ -78,7 +80,7 @@ function createWindow() {
     show: false
   });
 
-  // Save window size and position
+  // Save window bounds on resize/move
   mainWindow.on("resize", () => {
     if (!mainWindow) return;
     const bounds = mainWindow.getBounds();
@@ -93,10 +95,10 @@ function createWindow() {
 
   // Show window when ready
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    mainWindow?.show();
   });
 
-  // Load app depending on environment
+  // Load app
   if (process.env.NODE_ENV === "development") {
     mainWindow.loadURL("http://localhost:5000");
     mainWindow.webContents.openDevTools();
@@ -112,7 +114,9 @@ function createWindow() {
 // -------------------------------------------------------------
 // IPC Handlers
 // -------------------------------------------------------------
-ipcMain.handle("get-database-path", () => getDatabasePath());
+ipcMain.handle("get-database-path", () => {
+  return getDatabasePath();
+});
 
 ipcMain.handle("select-database-location", async () => {
   const newPath = await selectDatabaseLocation();
@@ -168,8 +172,11 @@ ipcMain.handle("import-database", async () => {
   return { success: false, error: "Import cancelled" };
 });
 
-// Activation
-ipcMain.handle("get-activation-status", () => store.get("isActivated", false));
+// Activation handlers
+ipcMain.handle("get-activation-status", () => {
+  return store.get("isActivated", false);
+});
+
 ipcMain.handle("set-activation-status", (_event, status) => {
   store.set("isActivated", status);
   return true;
@@ -190,13 +197,14 @@ app.whenReady().then(async () => {
 
   process.env.DATABASE_PATH = dbPath;
 
-  // Start your backend server
-  await import("../server/index.js");
+  const serverModule = await import("../server/index.js");
 
   createWindow();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
   });
 });
 
