@@ -31,7 +31,6 @@
         ]
       }
     ],
-    "icon": "build/icon.ico",
     "artifactName": "${productName}-Setup-${version}.${ext}",
     "requestedExecutionLevel": "requireAdministrator"
   },
@@ -39,13 +38,9 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "allowElevation": true,
-    "installerIcon": "build/icon.ico",
-    "uninstallerIcon": "build/icon.ico",
-    "installerHeaderIcon": "build/icon.ico",
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "AMPaints - PaintPulse",
-    "license": "LICENSE.txt",
     "artifactName": "AMPaints-Setup-${version}.${ext}"
   },
   "portable": {
