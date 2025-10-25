@@ -53,7 +53,10 @@ await esbuild.build({
   external: [
     'better-sqlite3',
     'express',
-    'ws'
+    'ws',
+    'vite',
+    '@vitejs/plugin-react',
+    '@replit/*'
   ],
   packages: 'external',
 });
