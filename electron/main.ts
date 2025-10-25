@@ -66,7 +66,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    title: "PaintPulse v1.3 COMPLETE - Paint Store Management",
+    title: "PaintPulse v1.4 FINAL - Paint Store Management",
     show: false, // Don't show until ready-to-show event
   });
   
