@@ -1,9 +1,7 @@
-name: Build Windows Executable
+name: Build Windows .EXE Installer
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
@@ -12,32 +10,34 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-    
-    - name: Install dependencies
-      run: npm install
-    
-    - name: Build frontend
-      run: npm run build
-    
-    - name: Build server
-      run: npm run build:server
-    
-    - name: Build Electron app
-      run: npm run build:electron
-    
-    - name: Package Windows installer
-      run: npm run package:win
-    
-    - name: Upload installer artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: AMPaints-Windows-Installer
-        path: dist-installer/*.exe
-        retention-days: 30
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build frontend and backend
+        run: npm run build
+      
+      - name: Build Electron files
+        run: node build-electron.js
+      
+      - name: Package Windows installer
+        run: npx electron-builder --win --x64
+      
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AMPaints-Windows-Installer
+          path: release/*.exe
+          retention-days: 30
