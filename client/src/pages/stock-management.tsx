@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Package, Palette, Layers, TruckIcon, Search } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -37,6 +37,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, VariantWithProduct, ColorWithVariantAndProduct } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Trash } from "lucide-react";
 
 const productFormSchema = z.object({
   company: z.string().min(1, "Company name is required"),
@@ -61,11 +62,40 @@ const stockInFormSchema = z.object({
   quantity: z.string().min(1, "Quantity is required"),
 });
 
+/**
+ * Quick add combined form schema (zod)
+ */
+const quickAddSchema = z.object({
+  company: z.string().min(1, "Company name is required"),
+  productName: z.string().min(1, "Product name is required"),
+  variants: z
+    .array(
+      z.object({
+        packingSize: z.string().min(1, "Packing size is required"),
+        rate: z.string().min(1, "Rate is required"),
+        colors: z
+          .array(
+            z.object({
+              colorName: z.string().min(1, "Color name is required"),
+              colorCode: z.string().min(1, "Color code is required"),
+              stockQuantity: z.string().min(1, "Quantity is required"),
+            })
+          )
+          .min(0),
+      })
+    )
+    .min(1, "Add at least one variant"),
+});
+
+type QuickAddType = z.infer<typeof quickAddSchema>;
+
 export default function StockManagement() {
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
   const [isColorDialogOpen, setIsColorDialogOpen] = useState(false);
   const [isStockInDialogOpen, setIsStockInDialogOpen] = useState(false);
+  const [isQuickAddDialogOpen, setIsQuickAddDialogOpen] = useState(false);
+
   const [colorSearchQuery, setColorSearchQuery] = useState("");
   const [stockInSearchQuery, setStockInSearchQuery] = useState("");
   const [selectedColorForStockIn, setSelectedColorForStockIn] = useState<ColorWithVariantAndProduct | null>(null);
@@ -86,7 +116,7 @@ export default function StockManagement() {
   const filteredColors = useMemo(() => {
     const query = colorSearchQuery.toLowerCase().trim();
     if (!query) return colors;
-    
+
     return colors
       .map((color) => {
         let score = 0;
@@ -95,18 +125,18 @@ export default function StockManagement() {
         const company = color.variant.product.company.toLowerCase();
         const product = color.variant.product.productName.toLowerCase();
         const size = color.variant.packingSize.toLowerCase();
-        
+
         if (colorCode === query) score += 1000;
         else if (colorCode.startsWith(query)) score += 500;
         else if (colorCode.includes(query)) score += 100;
-        
+
         if (colorName === query) score += 200;
         else if (colorName.includes(query)) score += 50;
-        
+
         if (company.includes(query)) score += 30;
         if (product.includes(query)) score += 30;
         if (size.includes(query)) score += 20;
-        
+
         return { color, score };
       })
       .filter(({ score }) => score > 0)
@@ -117,7 +147,7 @@ export default function StockManagement() {
   const filteredColorsForStockIn = useMemo(() => {
     const query = stockInSearchQuery.toLowerCase().trim();
     if (!query) return colors;
-    
+
     return colors
       .map((color) => {
         let score = 0;
@@ -126,18 +156,18 @@ export default function StockManagement() {
         const company = color.variant.product.company.toLowerCase();
         const product = color.variant.product.productName.toLowerCase();
         const size = color.variant.packingSize.toLowerCase();
-        
+
         if (colorCode === query) score += 1000;
         else if (colorCode.startsWith(query)) score += 500;
         else if (colorCode.includes(query)) score += 100;
-        
+
         if (colorName === query) score += 200;
         else if (colorName.includes(query)) score += 50;
-        
+
         if (company.includes(query)) score += 30;
         if (product.includes(query)) score += 30;
         if (size.includes(query)) score += 20;
-        
+
         return { color, score };
       })
       .filter(({ score }) => score > 0)
@@ -145,6 +175,7 @@ export default function StockManagement() {
       .map(({ color }) => color);
   }, [colors, stockInSearchQuery]);
 
+  // Existing forms
   const productForm = useForm<z.infer<typeof productFormSchema>>({
     resolver: zodResolver(productFormSchema),
     defaultValues: {
@@ -180,6 +211,140 @@ export default function StockManagement() {
     },
   });
 
+  // New Quick Add form
+  const quickAddForm = useForm<QuickAddType>({
+    resolver: zodResolver(quickAddSchema),
+    defaultValues: {
+      company: "",
+      productName: "",
+      variants: [
+        {
+          packingSize: "",
+          rate: "",
+          colors: [
+            {
+              colorName: "",
+              colorCode: "",
+              stockQuantity: "",
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const {
+    control: quickControl,
+    handleSubmit: handleQuickSubmit,
+    reset: resetQuickForm,
+  } = quickAddForm;
+
+  const {
+    fields: variantFields,
+    append: appendVariant,
+    remove: removeVariant,
+  } = useFieldArray({
+    control: quickControl,
+    name: "variants",
+  });
+
+  // Child component to handle colors array per variant (safe - hooks inside child)
+  function VariantColors({
+    variantIndex,
+  }: {
+    variantIndex: number;
+  }) {
+    const name = `variants.${variantIndex}.colors` as const;
+    const { fields: colorFields, append: appendColor, remove: removeColor } = useFieldArray({
+      control: quickControl,
+      name,
+    });
+
+    return (
+      <div className="space-y-2 border rounded p-3 bg-muted/5">
+        {colorFields.map((cf, cIndex) => (
+          <div key={cf.id} className="grid grid-cols-12 gap-2 items-end">
+            <div className="col-span-4">
+              <FormField
+                control={quickControl}
+                name={`variants.${variantIndex}.colors.${cIndex}.colorName` as const}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Color Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="e.g., Sky Blue" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="col-span-4">
+              <FormField
+                control={quickControl}
+                name={`variants.${variantIndex}.colors.${cIndex}.colorCode` as const}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Color Code</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="e.g., RAL 5002" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="col-span-3">
+              <FormField
+                control={quickControl}
+                name={`variants.${variantIndex}.colors.${cIndex}.stockQuantity` as const}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Qty</FormLabel>
+                    <FormControl>
+                      <Input {...field} type="number" min="0" placeholder="0" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="col-span-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => removeColor(cIndex)}
+                aria-label="Remove color"
+                className="h-9 w-9"
+              >
+                <Trash className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+
+        <div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              appendColor({
+                colorName: "",
+                colorCode: "",
+                stockQuantity: "",
+              })
+            }
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add Color
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Existing mutations (kept)
   const createProductMutation = useMutation({
     mutationFn: async (data: z.infer<typeof productFormSchema>) => {
       return await apiRequest("POST", "/api/products", data);
@@ -237,7 +402,8 @@ export default function StockManagement() {
       const res = await apiRequest("POST", `/api/colors/${data.colorId}/stock-in`, {
         quantity: parseInt(data.quantity),
       });
-      return await res.json();
+      // depending on apiRequest return type
+      return res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
@@ -248,6 +414,80 @@ export default function StockManagement() {
     },
     onError: () => {
       toast({ title: "Failed to add stock", variant: "destructive" });
+    },
+  });
+
+  // Quick add mutation will run frontend-sequence using existing APIs
+  const quickAddMutation = useMutation({
+    mutationFn: async (data: QuickAddType) => {
+      // helper to normalize apiRequest response (works whether apiRequest returns parsed json or Response)
+      const parse = async (res: any) => {
+        if (!res) return res;
+        if (typeof res.json === "function") {
+          try {
+            return await res.json();
+          } catch {
+            return res;
+          }
+        }
+        return res;
+      };
+
+      // create product
+      const productResp = await apiRequest("POST", "/api/products", {
+        company: data.company,
+        productName: data.productName,
+      });
+      const product = await parse(productResp);
+      const productId = product?.id ?? product?.result?.id ?? (productResp?.id ?? null);
+      if (!productId) {
+        // If backend returns nothing, try reading "id" from parsed result; otherwise throw
+        throw new Error("Failed to create product: no id returned");
+      }
+
+      // create variants sequentially and collect created variant ids
+      const createdVariants: Array<{ id: string; packingSize: string; rate: number }> = [];
+
+      for (const v of data.variants) {
+        const variantResp = await apiRequest("POST", "/api/variants", {
+          productId,
+          packingSize: v.packingSize,
+          rate: parseFloat(v.rate),
+        });
+        const variant = await parse(variantResp);
+        const variantId = variant?.id ?? variant?.result?.id ?? (variantResp?.id ?? null);
+        if (!variantId) {
+          throw new Error(`Failed to create variant for packing size ${v.packingSize}`);
+        }
+        createdVariants.push({ id: variantId, packingSize: v.packingSize, rate: parseFloat(v.rate) });
+
+        // create colors for this variant
+        if (Array.isArray(v.colors) && v.colors.length > 0) {
+          for (const c of v.colors) {
+            await apiRequest("POST", "/api/colors", {
+              variantId,
+              colorName: c.colorName,
+              colorCode: c.colorCode,
+              stockQuantity: parseInt(c.stockQuantity, 10),
+            });
+          }
+        }
+      }
+
+      return { product, createdVariants };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/variants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
+      toast({ title: "Product, variants and colors added successfully" });
+      resetQuickForm();
+      setIsQuickAddDialogOpen(false);
+    },
+    onError: (err: any) => {
+      console.error(err);
+      toast({ title: "Failed to quick add product", description: String(err?.message ?? err), variant: "destructive" });
     },
   });
 
@@ -266,8 +506,12 @@ export default function StockManagement() {
         </div>
       </div>
 
-      <Tabs defaultValue="colors" className="space-y-4">
+      <Tabs defaultValue="quick-add" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="quick-add" data-testid="tab-quick-add">
+            <Package className="mr-2 h-4 w-4" />
+            Quick Add
+          </TabsTrigger>
           <TabsTrigger value="products" data-testid="tab-products">
             <Package className="mr-2 h-4 w-4" />
             Products
@@ -285,6 +529,176 @@ export default function StockManagement() {
             Stock In
           </TabsTrigger>
         </TabsList>
+
+        {/* Quick Add Tab */}
+        <TabsContent value="quick-add" className="space-y-4">
+          <Card>
+            <CardHeader className="flex items-center justify-between gap-4">
+              <CardTitle>Quick Add — Product + Variants + Colors</CardTitle>
+              <div>
+                <Dialog open={isQuickAddDialogOpen} onOpenChange={setIsQuickAddDialogOpen}>
+                  <Button onClick={() => setIsQuickAddDialogOpen(true)} data-testid="button-open-quick-add">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Quick Add
+                  </Button>
+
+                  <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Quick Add Product</DialogTitle>
+                      <DialogDescription>Add a product with multiple variants and colors in one go.</DialogDescription>
+                    </DialogHeader>
+
+                    <Form {...quickAddForm}>
+                      <form
+                        onSubmit={handleQuickSubmit((data) => quickAddMutation.mutate(data))}
+                        className="space-y-6"
+                      >
+                        <div className="grid grid-cols-12 gap-4">
+                          <div className="col-span-6">
+                            <FormField
+                              control={quickControl}
+                              name="company"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Company Name</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g., Premium Paint Co" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <div className="col-span-6">
+                            <FormField
+                              control={quickControl}
+                              name="productName"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Product Name</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g., Exterior Emulsion" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">Variants</h3>
+                            <div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  appendVariant({
+                                    packingSize: "",
+                                    rate: "",
+                                    colors: [
+                                      {
+                                        colorName: "",
+                                        colorCode: "",
+                                        stockQuantity: "",
+                                      },
+                                    ],
+                                  })
+                                }
+                              >
+                                <Plus className="mr-2 h-4 w-4" /> Add Variant
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            {variantFields.map((vf, vIndex) => (
+                              <div key={vf.id} className="border rounded p-4 bg-muted/3">
+                                <div className="grid grid-cols-12 gap-3 items-end">
+                                  <div className="col-span-5">
+                                    <FormField
+                                      control={quickControl}
+                                      name={`variants.${vIndex}.packingSize` as const}
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Packing Size</FormLabel>
+                                          <FormControl>
+                                            <Input placeholder="e.g., 1L, 4L, 16L" {...field} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </div>
+
+                                  <div className="col-span-5">
+                                    <FormField
+                                      control={quickControl}
+                                      name={`variants.${vIndex}.rate` as const}
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>Rate (Rs.)</FormLabel>
+                                          <FormControl>
+                                            <Input type="number" step="0.01" placeholder="e.g., 250.00" {...field} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </div>
+
+                                  <div className="col-span-2 flex gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeVariant(vIndex)}
+                                      className="h-9"
+                                    >
+                                      <Trash className="h-4 w-4" />
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4">
+                                  <h4 className="text-sm font-medium mb-2">Colors for this variant</h4>
+                                  <VariantColors variantIndex={vIndex} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              resetQuickForm();
+                              setIsQuickAddDialogOpen(false);
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={quickAddMutation.isLoading}>
+                            {quickAddMutation.isLoading ? "Saving..." : "Save Product"}
+                          </Button>
+                        </div>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Use Quick Add to create a product with many variants and their colors in one operation.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Products Tab */}
         <TabsContent value="products" className="space-y-4">
@@ -625,36 +1039,36 @@ export default function StockManagement() {
               ) : (
                 <div className="space-y-2">
                   <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead>Color Name</TableHead>
-                      <TableHead>Color Code</TableHead>
-                      <TableHead>Stock</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredColors.map((color) => (
-                      <TableRow key={color.id} data-testid={`row-color-${color.id}`}>
-                        <TableCell className="font-medium">{color.variant.product.company}</TableCell>
-                        <TableCell>{color.variant.product.productName}</TableCell>
-                        <TableCell>{color.variant.packingSize}</TableCell>
-                        <TableCell>{color.colorName}</TableCell>
-                        <TableCell><Badge variant="outline">{color.colorCode}</Badge></TableCell>
-                        <TableCell>{color.stockQuantity}</TableCell>
-                        <TableCell>{getStockBadge(color.stockQuantity)}</TableCell>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Company</TableHead>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Size</TableHead>
+                        <TableHead>Color Name</TableHead>
+                        <TableHead>Color Code</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {colorSearchQuery && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    Showing {filteredColors.length} of {colors.length} colors
-                  </p>
-                )}
+                    </TableHeader>
+                    <TableBody>
+                      {filteredColors.map((color) => (
+                        <TableRow key={color.id} data-testid={`row-color-${color.id}`}>
+                          <TableCell className="font-medium">{color.variant.product.company}</TableCell>
+                          <TableCell>{color.variant.product.productName}</TableCell>
+                          <TableCell>{color.variant.packingSize}</TableCell>
+                          <TableCell>{color.colorName}</TableCell>
+                          <TableCell><Badge variant="outline">{color.colorCode}</Badge></TableCell>
+                          <TableCell>{color.stockQuantity}</TableCell>
+                          <TableCell>{getStockBadge(color.stockQuantity)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {colorSearchQuery && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Showing {filteredColors.length} of {colors.length} colors
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -691,7 +1105,7 @@ export default function StockManagement() {
                       data-testid="input-stock-in-search"
                     />
                   </div>
-                  
+
                   {filteredColors.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       No colors found matching your search.
@@ -735,7 +1149,7 @@ export default function StockManagement() {
                       ))}
                     </div>
                   )}
-                  
+
                   {colorSearchQuery && filteredColors.length > 0 && (
                     <p className="text-xs text-muted-foreground text-center">
                       Showing {filteredColors.length} of {colors.length} colors
@@ -747,8 +1161,8 @@ export default function StockManagement() {
           </Card>
 
           {/* Stock In Dialog */}
-          <Dialog 
-            open={isStockInDialogOpen} 
+          <Dialog
+            open={isStockInDialogOpen}
             onOpenChange={(open) => {
               setIsStockInDialogOpen(open);
               if (!open) {
@@ -869,9 +1283,9 @@ export default function StockManagement() {
                     />
 
                     <div className="flex justify-end gap-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={() => {
                           setSelectedColorForStockIn(null);
                           setStockInSearchQuery("");
