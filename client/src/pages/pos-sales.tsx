@@ -13,7 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, Minus, Trash2, ShoppingCart, Package2 } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  Package2,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { ColorWithVariantAndProduct } from "@shared/schema";
@@ -28,27 +35,28 @@ interface CartItem {
 
 export default function POSSales() {
   const [, setLocation] = useLocation();
-  const [searchOpen, setSearchOpen] = useState(false);
+  const { toast } = useToast();
+
+  // UI state
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
+  const [confirmQtyOpen, setConfirmQtyOpen] = useState(false);
+  const [quantityToAdd, setQuantityToAdd] = useState(1);
+
+  // Cart & customer
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
-  const { toast } = useToast();
 
-  // For qty confirmation
-  const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
-  const [quantityToAdd, setQuantityToAdd] = useState(1);
-  const [confirmQtyOpen, setConfirmQtyOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Query data
+  // Data fetch
   const { data: colors = [], isLoading } = useQuery<ColorWithVariantAndProduct[]>({
     queryKey: ["/api/colors"],
   });
 
-  // Mutation
+  // Create sale mutation (same shape as your backend expects)
   const createSaleMutation = useMutation({
     mutationFn: async (data: {
       customerName: string;
@@ -59,7 +67,7 @@ export default function POSSales() {
       items: { colorId: string; quantity: number; rate: number; subtotal: number }[];
     }) => {
       const res = await apiRequest("POST", "/api/sales", data);
-      return await res.json();
+      return res.json();
     },
     onSuccess: (sale) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
@@ -77,43 +85,52 @@ export default function POSSales() {
     },
   });
 
-  // --- Keyboard Shortcuts ---
+  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // F2 -> focus search
       if (e.key === "F2") {
         e.preventDefault();
-        setSearchOpen(true);
-        setTimeout(() => searchInputRef.current?.focus(), 100);
+        searchInputRef.current?.focus();
+        return;
       }
+      // Escape -> close confirm modal
       if (e.key === "Escape") {
-        setSearchOpen(false);
         setConfirmQtyOpen(false);
+        return;
       }
+      // Ctrl+P -> Complete Paid Sale
       if (e.ctrlKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
         handleCompleteSale(true);
+        return;
       }
+      // Ctrl+B -> Create Bill (Unpaid/Partial)
       if (e.ctrlKey && e.key.toLowerCase() === "b") {
         e.preventDefault();
         handleCompleteSale(false);
+        return;
       }
+      // Delete -> clear cart
+      if (e.key === "Delete") {
+        if (cart.length > 0 && confirm("Clear cart?")) setCart([]);
+        return;
+      }
+      // Ctrl+F -> focus search
       if (e.ctrlKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         searchInputRef.current?.focus();
-      }
-      if (e.key === "Delete") {
-        e.preventDefault();
-        if (cart.length > 0 && confirm("Clear cart?")) setCart([]);
+        return;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [cart, customerName, customerPhone, amountPaid]);
 
-  // Filtered colors
+  // Search scoring & filtering (keeps exact/color-code first)
   const filteredColors = useMemo(() => {
     if (!searchQuery) return colors;
-    const query = searchQuery.toLowerCase().trim();
+    const q = searchQuery.toLowerCase().trim();
     return colors
       .map((color) => {
         let score = 0;
@@ -122,14 +139,18 @@ export default function POSSales() {
         const company = color.variant.product.company.toLowerCase();
         const product = color.variant.product.productName.toLowerCase();
         const size = color.variant.packingSize.toLowerCase();
-        if (colorCode === query) score += 1000;
-        else if (colorCode.startsWith(query)) score += 500;
-        else if (colorCode.includes(query)) score += 100;
-        if (colorName === query) score += 200;
-        else if (colorName.includes(query)) score += 50;
-        if (company.includes(query)) score += 30;
-        if (product.includes(query)) score += 30;
-        if (size.includes(query)) score += 20;
+
+        if (colorCode === q) score += 1000;
+        else if (colorCode.startsWith(q)) score += 500;
+        else if (colorCode.includes(q)) score += 100;
+
+        if (colorName === q) score += 200;
+        else if (colorName.includes(q)) score += 50;
+
+        if (company.includes(q)) score += 30;
+        if (product.includes(q)) score += 30;
+        if (size.includes(q)) score += 20;
+
         return { color, score };
       })
       .filter(({ score }) => score > 0)
@@ -137,61 +158,42 @@ export default function POSSales() {
       .map(({ color }) => color);
   }, [colors, searchQuery]);
 
-  // Add to cart
-  const addToCart = (color: ColorWithVariantAndProduct, quantity: number) => {
+  // Cart operations
+  const addToCart = (color: ColorWithVariantAndProduct, qty: number) => {
     if (color.stockQuantity === 0) {
       toast({ title: "Out of stock", variant: "destructive" });
       return;
     }
-    const existingItem = cart.find((item) => item.colorId === color.id);
-    if (existingItem) {
-      setCart(
-        cart.map((item) =>
-          item.colorId === color.id
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
-        )
-      );
+    const existing = cart.find((c) => c.colorId === color.id);
+    if (existing) {
+      setCart(cart.map((c) => c.colorId === color.id ? { ...c, quantity: c.quantity + qty } : c));
     } else {
-      setCart([
-        ...cart,
-        {
-          colorId: color.id,
-          color,
-          quantity,
-          rate: parseFloat(color.variant.rate),
-        },
-      ]);
+      setCart([...cart, { colorId: color.id, color, quantity: qty, rate: parseFloat(color.variant.rate) }]);
     }
-    toast({ title: `${quantity} item${quantity > 1 ? "s" : ""} added to cart` });
-    setSearchOpen(false);
-    setSearchQuery("");
+    toast({ title: `${qty} added to cart` });
     setConfirmQtyOpen(false);
     setQuantityToAdd(1);
     setSelectedColor(null);
+    setSearchQuery("");
   };
 
   const updateQuantity = (colorId: string, delta: number) => {
-    setCart(
-      cart.map((item) =>
-        item.colorId === colorId
-          ? { ...item, quantity: Math.max(1, item.quantity + delta) }
-          : item
-      )
-    );
+    setCart(cart.map((it) => it.colorId === colorId ? { ...it, quantity: Math.max(1, it.quantity + delta) } : it));
   };
 
   const removeFromCart = (colorId: string) => {
-    setCart(cart.filter((item) => item.colorId !== colorId));
+    setCart(cart.filter((it) => it.colorId !== colorId));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.rate, 0);
-  const tax = subtotal * 0.18;
+  // Totals
+  const subtotal = cart.reduce((s, it) => s + it.quantity * it.rate, 0);
+  const tax = subtotal * 0.18; // 18% GST
   const total = subtotal + tax;
 
+  // Complete sale
   const handleCompleteSale = (isPaid: boolean) => {
     if (!customerName || !customerPhone) {
-      toast({ title: "Please enter customer name and phone number", variant: "destructive" });
+      toast({ title: "Enter customer name & phone", variant: "destructive" });
       return;
     }
     if (cart.length === 0) {
@@ -200,196 +202,237 @@ export default function POSSales() {
     }
     const paid = isPaid ? total : parseFloat(amountPaid || "0");
     const paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
+
     createSaleMutation.mutate({
       customerName,
       customerPhone,
       totalAmount: total,
       amountPaid: paid,
       paymentStatus,
-      items: cart.map((item) => ({
-        colorId: item.colorId,
-        quantity: item.quantity,
-        rate: item.rate,
-        subtotal: item.quantity * item.rate,
-      })),
+      items: cart.map((it) => ({ colorId: it.colorId, quantity: it.quantity, rate: it.rate, subtotal: it.quantity * it.rate })),
     });
   };
 
+  // Small helper for stock badge
   const getStockBadge = (stock: number) => {
-    if (stock === 0) return <Badge variant="destructive">Out of Stock</Badge>;
-    if (stock < 10) return <Badge variant="secondary">Low Stock</Badge>;
-    return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">In Stock</Badge>;
+    if (stock === 0) return <Badge variant="destructive">Out of stock</Badge>;
+    if (stock < 10) return <Badge variant="secondary">Low</Badge>;
+    return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">In</Badge>;
   };
 
   return (
     <div className="min-h-screen p-6 bg-gray-50">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT SIDE: Products Section */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg p-6 shadow-sm mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">POS Sales</h1>
-            <p className="text-gray-600">Use <kbd className="bg-gray-200 px-2 rounded">F2</kbd> to open search</p>
+      {/* Top title + search */}
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-lg p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">POS Sales</h1>
+            <p className="text-sm text-gray-500 mt-1">Use <kbd className="bg-gray-100 px-2 py-0.5 rounded">F2</kbd> to focus search</p>
+          </div>
+
+          <div className="w-full md:w-1/2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search color code, name, product or company..."
+                className="pl-10 h-12 shadow-sm"
+                aria-label="Search products"
+              />
+            </div>
           </div>
         </div>
 
-        {/* RIGHT SIDE: Cart & Customer Section */}
-        <div className="flex flex-col h-[calc(100vh-3rem)] space-y-6 overflow-hidden">
-          {/* Cart */}
-          <Card className="flex-1 flex flex-col shadow-sm overflow-hidden">
-            <CardHeader className="bg-gray-50 border-b shrink-0">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ShoppingCart className="h-5 w-5" />
-                Shopping Cart ({cart.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 p-0 overflow-y-auto">
-              {cart.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>Your cart is empty</p>
+        {/* Main columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Products + Cart (span 2 cols) */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Products grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {isLoading ? (
+                [...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg p-4 shadow-sm">
+                    <Skeleton className="h-6 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-full mb-1" />
+                    <Skeleton className="h-4 w-2/3 mt-2" />
+                  </div>
+                ))
+              ) : ( (searchQuery ? filteredColors : colors).length === 0 ? (
+                <div className="col-span-full bg-white rounded-lg p-8 text-center shadow-sm">
+                  <Package2 className="h-10 w-10 mx-auto text-gray-300 mb-3" />
+                  <p className="text-gray-500">No products found</p>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100">
-                  {cart.map((item) => (
-                    <div key={item.colorId} className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-sm text-gray-900">
-                            {item.color.variant.product.company}
-                          </h4>
-                          <p className="text-gray-600 text-xs mt-1">
-                            {item.color.variant.product.productName}
-                          </p>
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            <Badge variant="outline" className="text-xs">{item.color.variant.packingSize}</Badge>
-                            <Badge variant="outline" className="text-xs">{item.color.colorName}</Badge>
-                            <Badge variant="outline" className="text-xs font-mono">{item.color.colorCode}</Badge>
-                          </div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.colorId)} className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.colorId, -1)}>
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="text-sm font-medium w-8 text-center">{item.quantity}</span>
-                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(item.colorId, 1)}>
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold text-gray-900">Rs. {Math.round(item.quantity * item.rate)}</p>
-                          <p className="text-xs text-gray-500">Rs. {Math.round(item.rate)} each</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-            {cart.length > 0 && (
-              <div className="p-4 bg-gray-50 border-t shrink-0">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Subtotal</span>
-                    <span className="font-medium">Rs. {Math.round(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">GST (18%)</span>
-                    <span className="font-medium">Rs. {Math.round(tax)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-                    <span>Total</span>
-                    <span className="text-blue-600">Rs. {Math.round(total)}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Customer Details */}
-          <Card className="shadow-sm shrink-0">
-            <CardHeader>
-              <CardTitle className="text-lg">Customer Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="customerName" className="text-sm font-medium">Name</Label>
-                <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-10" />
-              </div>
-              <div>
-                <Label htmlFor="customerPhone" className="text-sm font-medium">Phone Number</Label>
-                <Input id="customerPhone" type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="h-10" />
-              </div>
-              <div>
-                <Label htmlFor="amountPaid" className="text-sm font-medium">Amount Paid (Optional)</Label>
-                <Input id="amountPaid" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="h-10" />
-              </div>
-              <div className="space-y-3 pt-2">
-                <Button className="w-full h-11 bg-green-600 hover:bg-green-700" onClick={() => handleCompleteSale(true)} disabled={createSaleMutation.isPending || cart.length === 0}>
-                  Complete Sale (Ctrl+P)
-                </Button>
-                <Button variant="outline" className="w-full h-11 border-gray-300" onClick={() => handleCompleteSale(false)} disabled={createSaleMutation.isPending || cart.length === 0}>
-                  Create Bill (Ctrl+B)
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Product Search Dialog */}
-      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl font-bold">Search Products</DialogTitle>
-            <DialogDescription>Type color code, name, or company</DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Input ref={searchInputRef} placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full h-12 text-base mb-4" autoFocus />
-
-            {filteredColors.length === 0 ? (
-              <div className="text-center py-16 text-gray-500">
-                <Package2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No products found</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pr-2 pb-4">
-                {filteredColors.map((color) => (
-                  <Card key={color.id} className="border hover:border-blue-400 hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col justify-between">
+                (searchQuery ? filteredColors : colors).map((color) => (
+                  <Card key={color.id} className="flex flex-col justify-between h-full border hover:shadow-lg transition">
                     <CardContent className="p-4 flex flex-col justify-between h-full">
                       <div>
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900 text-sm leading-tight">{color.variant.product.company}</h3>
-                            <p className="text-gray-600 text-xs">{color.variant.product.productName}</p>
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-900 leading-tight">{color.variant.product.company}</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">{color.variant.product.productName}</p>
                           </div>
-                          {getStockBadge(color.stockQuantity)}
+                          <div className="ml-2">{getStockBadge(color.stockQuantity)}</div>
                         </div>
+
                         <div className="flex flex-wrap gap-1 mb-2">
-                          <Badge variant="secondary" className="text-xs font-mono bg-blue-100 text-blue-700">{color.colorCode}</Badge>
+                          <Badge variant="secondary" className="text-xs font-mono bg-blue-50 text-blue-700">{color.colorCode}</Badge>
                           <Badge variant="outline" className="text-xs bg-gray-100">{color.variant.packingSize}</Badge>
                         </div>
-                        <p className="text-lg font-bold text-gray-800 mb-1">{color.colorName}</p>
+
+                        <p className="text-base font-semibold text-gray-800 mb-1">{color.colorName}</p>
                       </div>
-                      <div className="flex items-center justify-between mt-3">
-                        <p className="text-blue-600 font-semibold text-base">Rs. {color.variant.rate}</p>
-                        <Button size="sm" className="h-8 px-3" onClick={() => { setSelectedColor(color); setConfirmQtyOpen(true); }}>
-                          Add to Cart
+
+                      <div className="flex items-center justify-between pt-3 border-t">
+                        <div className="text-base font-semibold text-gray-900">Rs. {Math.round(parseFloat(color.variant.rate))}</div>
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700"
+                          onClick={() => {
+                            setSelectedColor(color);
+                            setQuantityToAdd(1);
+                            setConfirmQtyOpen(true);
+                          }}
+                          disabled={color.stockQuantity === 0}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add
                         </Button>
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
+                ))
+              )) }
+            </div>
+
+            {/* Shopping Cart (below product grid) */}
+            <Card className="shadow-sm">
+              <CardHeader className="bg-white border-b">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShoppingCart className="h-5 w-5" />
+                  Shopping Cart ({cart.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {cart.length === 0 ? (
+                  <div className="text-center py-10 text-gray-500">
+                    <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    <p>Your cart is empty</p>
+                  </div>
+                ) : (
+                  <div className="max-h-[60vh] overflow-y-auto divide-y divide-gray-100">
+                    {cart.map((it) => (
+                      <div key={it.colorId} className="p-4 flex flex-col gap-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-sm font-medium text-gray-900 truncate">{it.color.variant.product.company}</h4>
+                                <p className="text-xs text-gray-500 truncate">{it.color.variant.product.productName}</p>
+                              </div>
+                              <div className="ml-3 text-right">
+                                <div className="text-sm font-semibold">Rs. {Math.round(it.quantity * it.rate)}</div>
+                                <div className="text-xs text-gray-500">Rs. {Math.round(it.rate)} ea</div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              <Badge variant="outline" className="text-xs">{it.color.variant.packingSize}</Badge>
+                              <Badge variant="outline" className="text-xs">{it.color.colorName}</Badge>
+                              <Badge variant="outline" className="text-xs font-mono">{it.color.colorCode}</Badge>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(it.colorId, -1)}>
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <div className="w-10 text-center text-sm">{it.quantity}</div>
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => updateQuantity(it.colorId, 1)}>
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeFromCart(it.colorId)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-        </DialogContent>
-      </Dialog>
+
+          {/* Right: Customer details + Totals */}
+          <div className="space-y-6">
+            <Card className="sticky top-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Customer Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="customerName" className="text-sm">Name</Label>
+                  <Input id="customerName" className="h-10" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="customerPhone" className="text-sm">Phone Number</Label>
+                  <Input id="customerPhone" type="tel" className="h-10" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="amountPaid" className="text-sm">Amount Paid (Optional)</Label>
+                  <Input id="amountPaid" type="number" step="1" className="h-10" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
+                </div>
+
+                {/* Totals */}
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Subtotal</span>
+                    <span>Rs. {Math.round(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600 mt-1">
+                    <span>GST (18%)</span>
+                    <span>Rs. {Math.round(tax)}</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-bold mt-3">
+                    <span>Total</span>
+                    <span className="text-blue-600">Rs. {Math.round(total)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-3">
+                  <Button className="w-full h-11 bg-green-600 hover:bg-green-700" onClick={() => handleCompleteSale(true)} disabled={createSaleMutation.isPending || cart.length === 0}>
+                    Complete Sale (Ctrl+P)
+                  </Button>
+                  <Button variant="outline" className="w-full h-11" onClick={() => handleCompleteSale(false)} disabled={createSaleMutation.isPending || cart.length === 0}>
+                    Create Bill (Ctrl+B)
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Optional small actions card */}
+            <Card>
+              <CardContent className="space-y-2">
+                <div className="flex items-center justify-between text-sm text-gray-600">
+                  <span className="flex items-center gap-2"><kbd className="bg-gray-100 px-2 py-0.5 rounded">F2</kbd> Search</span>
+                  <span className="text-xs">Quick keys</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" onClick={() => { setCart([]); toast({ title: "Cart cleared" }); }}>Clear Cart</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
 
       {/* Quantity Confirmation Dialog */}
       <Dialog open={confirmQtyOpen} onOpenChange={setConfirmQtyOpen}>
@@ -397,23 +440,30 @@ export default function POSSales() {
           <DialogHeader>
             <DialogTitle>Confirm Quantity</DialogTitle>
             <DialogDescription>
-              Enter quantity for{" "}
-              <span className="font-semibold">{selectedColor?.colorCode}</span>
+              Add quantity for <span className="font-semibold">{selectedColor?.colorCode}</span>
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-center justify-center gap-3 my-4">
-            <Button size="icon" variant="outline" onClick={() => setQuantityToAdd(Math.max(1, quantityToAdd - 1))}>
-              <Minus className="h-4 w-4" />
-            </Button>
-            <Input type="number" className="w-20 text-center" value={quantityToAdd} onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 1))} />
-            <Button size="icon" variant="outline" onClick={() => setQuantityToAdd(quantityToAdd + 1)}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setConfirmQtyOpen(false)}>Cancel</Button>
-            <Button onClick={() => selectedColor && addToCart(selectedColor, quantityToAdd)}>Add</Button>
-          </div>
+
+          {selectedColor && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded">
+                <div className="text-sm font-medium">{selectedColor.variant.product.company} — {selectedColor.variant.product.productName}</div>
+                <div className="text-xs text-gray-500">{selectedColor.colorName} ({selectedColor.colorCode}) • {selectedColor.variant.packingSize}</div>
+                <div className="mt-2 text-sm font-semibold">Rs. {Math.round(parseFloat(selectedColor.variant.rate))}</div>
+              </div>
+
+              <div className="flex items-center justify-center gap-3">
+                <Button size="icon" variant="outline" onClick={() => setQuantityToAdd(Math.max(1, quantityToAdd - 1))}><Minus className="h-4 w-4" /></Button>
+                <Input type="number" className="w-20 text-center" value={quantityToAdd} onChange={(e) => setQuantityToAdd(Math.max(1, parseInt(e.target.value) || 1))} />
+                <Button size="icon" variant="outline" onClick={() => setQuantityToAdd(quantityToAdd + 1)}><Plus className="h-4 w-4" /></Button>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setConfirmQtyOpen(false)}>Cancel</Button>
+                <Button onClick={() => addToCart(selectedColor, quantityToAdd)}>Add {quantityToAdd}</Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
