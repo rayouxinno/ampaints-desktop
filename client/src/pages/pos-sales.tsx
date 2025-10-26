@@ -179,14 +179,14 @@ export default function POSSales() {
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Products Section */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-lg p-6 shadow-sm">
+        <div className="lg:col-span-2">
+          <div className="bg-white rounded-lg p-6 shadow-sm mb-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">POS Sales</h1>
             <p className="text-gray-600">Search by color code for fastest results</p>
           </div>
 
-          {/* Search */}
-          <div className="bg-white rounded-lg p-4 shadow-sm">
+          {/* Search Input - No extra space below */}
+          <div className="bg-white rounded-lg p-4 shadow-sm mb-6">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
@@ -223,91 +223,11 @@ export default function POSSales() {
               <p className="text-gray-500 text-sm mt-2">Add colors in Stock Management first</p>
             </div>
           )}
-
-          {/* Search Dialog */}
-          <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-            <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-              <DialogHeader className="pb-4">
-                <DialogTitle className="text-xl">Search Products</DialogTitle>
-                <DialogDescription>
-                  Exact color code matches appear first
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="flex-1 space-y-4 overflow-hidden">
-                <Input
-                  placeholder="Type color code, name, product..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full"
-                  autoFocus
-                />
-                
-                {filteredColors.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <Package2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No products found matching "{searchQuery}"</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto max-h-[400px] pr-2">
-                    {filteredColors.map((color) => (
-                      <div 
-                        key={color.id} 
-                        className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => addToCart(color)}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900 text-sm">
-                              {color.variant.product.company}
-                            </h3>
-                            <p className="text-gray-600 text-xs mt-1">
-                              {color.variant.product.productName}
-                            </p>
-                          </div>
-                          {getStockBadge(color.stockQuantity)}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap gap-1">
-                            <Badge variant="outline" className="text-xs bg-blue-50">
-                              {color.variant.packingSize}
-                            </Badge>
-                            <Badge variant="secondary" className="text-xs font-mono bg-gray-100">
-                              {color.colorCode}
-                            </Badge>
-                          </div>
-                          
-                          <p className="text-sm text-gray-700 font-medium">
-                            {color.colorName}
-                          </p>
-
-                          <div className="flex items-center justify-between pt-2">
-                            <span className="text-lg font-bold text-gray-900">
-                              Rs. {Math.round(parseFloat(color.variant.rate))}
-                            </span>
-                            <Button
-                              size="sm"
-                              disabled={color.stockQuantity === 0}
-                              className="bg-blue-600 hover:bg-blue-700"
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add to Cart
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
 
-        {/* Cart & Checkout Section */}
+        {/* Cart & Checkout Section - Top aligned */}
         <div className="space-y-6">
-          {/* Cart */}
+          {/* Cart Card */}
           <Card className="shadow-sm">
             <CardHeader className="bg-gray-50 border-b">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -322,9 +242,12 @@ export default function POSSales() {
                   <p className="text-sm">Your cart is empty</p>
                 </div>
               ) : (
-                <div className="max-h-[400px] overflow-y-auto">
-                  {cart.map((item) => (
-                    <div key={item.colorId} className="p-4 border-b border-gray-100 last:border-b-0">
+                <div className="max-h-[500px] overflow-y-auto">
+                  {cart.map((item, index) => (
+                    <div 
+                      key={item.colorId} 
+                      className={`p-4 ${index !== cart.length - 1 ? 'border-b border-gray-100' : ''}`}
+                    >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
                           <h4 className="font-semibold text-sm text-gray-900">
@@ -339,6 +262,9 @@ export default function POSSales() {
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               {item.color.colorName}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs font-mono">
+                              {item.color.colorCode}
                             </Badge>
                           </div>
                         </div>
@@ -409,7 +335,7 @@ export default function POSSales() {
             </CardContent>
           </Card>
 
-          {/* Customer Details */}
+          {/* Customer Details Card */}
           <Card className="shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Customer Details</CardTitle>
@@ -469,6 +395,88 @@ export default function POSSales() {
           </Card>
         </div>
       </div>
+
+      {/* Search Dialog - Fixed to show full cards */}
+      <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl">Search Products</DialogTitle>
+            <DialogDescription>
+              Exact color code matches appear first
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 space-y-4 overflow-hidden">
+            <Input
+              placeholder="Type color code, name, product..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-12 text-lg"
+              autoFocus
+            />
+            
+            {filteredColors.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <Package2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No products found matching "{searchQuery}"</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[60vh] pr-2">
+                {filteredColors.map((color) => (
+                  <Card 
+                    key={color.id} 
+                    className="cursor-pointer hover:shadow-lg transition-all duration-200 border-2 hover:border-blue-300"
+                    onClick={() => addToCart(color)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-gray-900 text-base">
+                            {color.variant.product.company}
+                          </h3>
+                          <p className="text-gray-600 text-sm mt-1">
+                            {color.variant.product.productName}
+                          </p>
+                        </div>
+                        {getStockBadge(color.stockQuantity)}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="secondary" className="text-sm font-mono bg-blue-100 text-blue-800">
+                            {color.colorCode}
+                          </Badge>
+                          <Badge variant="outline" className="text-sm bg-gray-100">
+                            {color.variant.packingSize}
+                          </Badge>
+                        </div>
+                        
+                        <p className="text-lg font-semibold text-gray-800">
+                          {color.colorName}
+                        </p>
+
+                        <div className="flex items-center justify-between pt-3 border-t">
+                          <span className="text-xl font-bold text-gray-900">
+                            Rs. {Math.round(parseFloat(color.variant.rate))}
+                          </span>
+                          <Button
+                            size="sm"
+                            disabled={color.stockQuantity === 0}
+                            className="bg-blue-600 hover:bg-blue-700 px-4"
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add to Cart
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
