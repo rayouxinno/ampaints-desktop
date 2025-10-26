@@ -44,8 +44,9 @@ await esbuild.build({
 
 // Build server for electron to dist/ so path resolution works correctly
 // (server uses import.meta.dirname + "public" which expects to be in dist/)
+// Use index.production.ts which has ZERO vite dependencies
 await esbuild.build({
-  entryPoints: ['server/index.ts'],
+  entryPoints: ['server/index.production.ts'],
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -53,10 +54,7 @@ await esbuild.build({
   external: [
     'better-sqlite3',
     'express',
-    'ws',
-    'vite',
-    '@vitejs/plugin-react',
-    '@replit/*'
+    'ws'
   ],
   packages: 'external',
 });
