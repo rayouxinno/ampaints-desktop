@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Search, Plus, Minus, Trash2, ShoppingCart, Package2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -28,23 +28,31 @@ interface CartItem {
 
 export default function POSSales() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  // Customer & cart
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [rate, setRate] = useState(0);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
-  const { toast } = useToast();
 
+  // Search modal & query
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Confirm modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
+  const [confirmQty, setConfirmQty] = useState(1);
+  const [confirmRate, setConfirmRate] = useState<number | "">("");
+
+  // Load colors
   const { data: colors = [], isLoading } = useQuery<ColorWithVariantAndProduct[]>({
     queryKey: ["/api/colors"],
   });
 
-  // 🔍 Filter products
+  // Search filtering (simple scoring could be re-added if desired)
   const filteredColors = useMemo(() => {
     if (!searchQuery) return colors;
     const q = searchQuery.toLowerCase().trim();
@@ -57,41 +65,16 @@ export default function POSSales() {
     );
   }, [colors, searchQuery]);
 
-  // 🛒 Cart logic
-  const addToCart = (color: ColorWithVariantAndProduct, qty = 1, customRate?: number) => {
-    const rateToUse = customRate ?? parseFloat(color.variant.rate);
-    const existing = cart.find((i) => i.colorId === color.id);
-    if (existing) {
-      setCart(
-        cart.map((i) =>
-          i.colorId === color.id
-            ? { ...i, quantity: i.quantity + qty, rate: rateToUse }
-            : i
-        )
-      );
-    } else {
-      setCart([...cart, { colorId: color.id, color, quantity: qty, rate: rateToUse }]);
-    }
-    toast({ title: "Added to cart" });
-  };
-
-  const updateQty = (id: string, delta: number) => {
-    setCart(
-      cart.map((i) =>
-        i.colorId === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i
-      )
-    );
-  };
-  const removeItem = (id: string) => setCart(cart.filter((i) => i.colorId !== id));
-
+  // Totals
   const subtotal = cart.reduce((s, i) => s + i.quantity * i.rate, 0);
   const tax = subtotal * 0.18;
   const total = subtotal + tax;
 
-  const createSale = useMutation({
+  // Sale mutation
+  const createSaleMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/sales", data);
-      return await res.json();
+      return res.json();
     },
     onSuccess: (sale) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
@@ -104,213 +87,415 @@ export default function POSSales() {
       setAmountPaid("");
       setLocation(`/bill/${sale.id}`);
     },
-    onError: () => toast({ title: "Failed to create sale", variant: "destructive" }),
+    onError: () => {
+      toast({ title: "Failed to create sale", variant: "destructive" });
+    },
   });
 
-  const handleComplete = (isPaid: boolean) => {
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 60);
+        return;
+      }
+      if (e.key === "Escape") {
+        // close modals
+        setSearchOpen(false);
+        setConfirmOpen(false);
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        handleCompleteSale(true);
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        handleCompleteSale(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [cart, customerName, customerPhone, amountPaid, confirmOpen]);
+
+  // Add to cart quick (from clicking card) or via confirm
+  const addToCart = (color: ColorWithVariantAndProduct, qty = 1, rate?: number) => {
+    const effectiveRate = rate ?? parseFloat(color.variant.rate);
+    setCart((prev) => {
+      const existing = prev.find((p) => p.colorId === color.id);
+      if (existing) {
+        return prev.map((p) =>
+          p.colorId === color.id ? { ...p, quantity: p.quantity + qty, rate: effectiveRate } : p
+        );
+      }
+      return [...prev, { colorId: color.id, color, quantity: qty, rate: effectiveRate }];
+    });
+    toast({ title: `${qty} x ${color.colorName} added to cart` });
+  };
+
+  const openConfirmFor = (color: ColorWithVariantAndProduct) => {
+    setSelectedColor(color);
+    setConfirmQty(1);
+    setConfirmRate(Number(color.variant.rate) || "");
+    setConfirmOpen(true);
+  };
+
+  const confirmAdd = () => {
+    if (!selectedColor) return;
+    const qty = Math.max(1, Math.floor(confirmQty));
+    const r = Number(confirmRate) || parseFloat(selectedColor.variant.rate);
+    addToCart(selectedColor, qty, r);
+    setConfirmOpen(false);
+    setSelectedColor(null);
+    setConfirmQty(1);
+    setConfirmRate("");
+  };
+
+  // Cart operations
+  const updateQuantity = (colorId: string, delta: number) => {
+    setCart((prev) =>
+      prev.map((it) => (it.colorId === colorId ? { ...it, quantity: Math.max(1, it.quantity + delta) } : it))
+    );
+  };
+  const removeFromCart = (colorId: string) => setCart((prev) => prev.filter((it) => it.colorId !== colorId));
+
+  // Complete sale
+  const handleCompleteSale = (isPaid: boolean) => {
     if (!customerName || !customerPhone) {
-      toast({ title: "Enter customer details", variant: "destructive" });
+      toast({ title: "Please enter customer name and phone", variant: "destructive" });
       return;
     }
-    if (!cart.length) {
-      toast({ title: "Cart empty", variant: "destructive" });
+    if (cart.length === 0) {
+      toast({ title: "Cart is empty", variant: "destructive" });
       return;
     }
     const paid = isPaid ? total : parseFloat(amountPaid || "0");
-    const status = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
-    createSale.mutate({
+    const paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
+    createSaleMutation.mutate({
       customerName,
       customerPhone,
       totalAmount: total,
       amountPaid: paid,
-      paymentStatus: status,
-      items: cart.map((i) => ({
-        colorId: i.colorId,
-        quantity: i.quantity,
-        rate: i.rate,
-        subtotal: i.quantity * i.rate,
+      paymentStatus,
+      items: cart.map((it) => ({
+        colorId: it.colorId,
+        quantity: it.quantity,
+        rate: it.rate,
+        subtotal: it.quantity * it.rate,
       })),
     });
   };
 
-  // ⌨️ Shortcuts
+  // Helper: stock badge
+  const stockBadge = (stock: number) => {
+    if (stock <= 0) return <Badge variant="destructive">Out</Badge>;
+    if (stock < 10) return <Badge variant="secondary">Low</Badge>;
+    return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">In</Badge>;
+  };
+
+  // Handle Enter key in confirm modal (confirm)
   useEffect(() => {
+    if (!confirmOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F2") {
+      if (e.key === "Enter") {
         e.preventDefault();
-        setSearchOpen(true);
-      }
-      if (e.ctrlKey && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        handleComplete(true);
-      }
-      if (e.ctrlKey && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        handleComplete(false);
+        confirmAdd();
       }
       if (e.key === "Escape") {
-        setSearchOpen(false);
         setConfirmOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cart, customerName, customerPhone, amountPaid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmOpen, confirmQty, confirmRate, selectedColor]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">POS Sales</h1>
-        <p className="text-gray-500">Press <b>F2</b> to search products</p>
-      </div>
+      <div className="max-w-7xl mx-auto">
+        {/* Header row: title + inline search */}
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">POS Sales</h1>
+            <p className="text-sm text-gray-500">Use <kbd className="bg-gray-100 px-2 rounded">F2</kbd> to open search</p>
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Cart */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="shadow-sm">
-            <CardHeader className="border-b bg-gray-50">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ShoppingCart className="h-5 w-5" />
-                Shopping Cart ({cart.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {cart.length === 0 ? (
-                <div className="py-16 text-center text-gray-500">
-                  <ShoppingCart className="h-12 w-12 mx-auto mb-3 opacity-40" />
-                  <p>Your cart is empty</p>
-                </div>
-              ) : (
-                <div className="max-h-[60vh] overflow-y-auto">
-                  {cart.map((i) => (
-                    <div key={i.colorId} className="flex justify-between p-4 border-b">
-                      <div>
-                        <h4 className="font-semibold text-sm">{i.color.variant.product.company}</h4>
-                        <p className="text-xs text-gray-600">{i.color.variant.product.productName}</p>
-                        <div className="flex gap-1 mt-1">
-                          <Badge variant="outline" className="text-xs">{i.color.colorCode}</Badge>
-                          <Badge variant="outline" className="text-xs">{i.color.variant.packingSize}</Badge>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="flex items-center justify-end gap-1 mb-1">
-                          <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQty(i.colorId, -1)}><Minus className="h-3 w-3" /></Button>
-                          <span className="text-sm font-medium w-6 text-center">{i.quantity}</span>
-                          <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => updateQty(i.colorId, 1)}><Plus className="h-3 w-3" /></Button>
-                        </div>
-                        <p className="text-sm font-semibold">Rs. {Math.round(i.quantity * i.rate)}</p>
-                        <Button size="icon" variant="ghost" className="text-red-500 h-6 w-6 mt-1" onClick={() => removeItem(i.colorId)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          {/* Inline search + button (Option B) */}
+          <div className="flex items-center gap-2 w-full max-w-lg">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchOpen(true)}
+                placeholder="Search color code, name, or product..."
+                className="pl-10 h-11 shadow-sm"
+                aria-label="Search products"
+              />
+            </div>
+            <Button
+              onClick={() => {
+                setSearchOpen(true);
+                setTimeout(() => searchInputRef.current?.focus(), 40);
+              }}
+              className="h-11"
+            >
+              Search
+            </Button>
+          </div>
         </div>
 
-        {/* Customer */}
-        <div className="space-y-6">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle>Customer Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <Label>Name</Label>
-                <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-              </div>
-              <div>
-                <Label>Phone</Label>
-                <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
-              </div>
-              <div>
-                <Label>Amount Paid (optional)</Label>
-                <Input type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} />
-              </div>
-              <div className="border-t pt-3 space-y-2 text-sm">
-                <div className="flex justify-between"><span>Subtotal</span><span>Rs. {Math.round(subtotal)}</span></div>
-                <div className="flex justify-between"><span>GST (18%)</span><span>Rs. {Math.round(tax)}</span></div>
-                <div className="flex justify-between font-bold text-blue-600"><span>Total</span><span>Rs. {Math.round(total)}</span></div>
-              </div>
-              <div className="pt-3 space-y-2">
-                <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleComplete(true)}>Complete Sale (Ctrl+P)</Button>
-                <Button variant="outline" className="w-full" onClick={() => handleComplete(false)}>Create Bill (Ctrl+B)</Button>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Main layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Cart (full left area) */}
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="shadow-sm">
+              <CardHeader className="bg-white border-b">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ShoppingCart className="h-5 w-5" />
+                  Shopping Cart ({cart.length})
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="p-0">
+                {cart.length === 0 ? (
+                  <div className="py-12 text-center text-gray-500">
+                    <Package2 className="mx-auto mb-3 h-12 w-12 opacity-40" />
+                    <p>Your cart is empty</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col">
+                    {cart.map((it) => (
+                      <div key={it.colorId} className="p-4 border-b last:border-b-0 flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-gray-900 truncate">{it.color.variant.product.company}</div>
+                              <div className="text-xs text-gray-500 truncate">{it.color.variant.product.productName}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-medium">Rs. {Math.round(it.quantity * it.rate)}</div>
+                              <div className="text-xs text-gray-500">Rs. {Math.round(it.rate)} each</div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 mt-2 items-center">
+                            <Badge variant="outline" className="text-xs">{it.color.colorCode}</Badge>
+                            <Badge variant="outline" className="text-xs">{it.color.variant.packingSize}</Badge>
+                            <div className="text-sm text-gray-700 ml-1">{it.color.colorName}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="flex items-center gap-2">
+                            <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQuantity(it.colorId, -1)}>
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <div className="w-10 text-center text-sm">{it.quantity}</div>
+                            <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQuantity(it.colorId, 1)}>
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500" onClick={() => removeFromCart(it.colorId)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right: Customer details & totals */}
+          <div className="space-y-6">
+            <Card className="sticky top-6 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">Customer Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label htmlFor="customerName">Name</Label>
+                  <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-10" />
+                </div>
+                <div>
+                  <Label htmlFor="customerPhone">Phone</Label>
+                  <Input id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="h-10" />
+                </div>
+                <div>
+                  <Label htmlFor="amountPaid">Amount Paid (optional)</Label>
+                  <Input id="amountPaid" type="number" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} className="h-10" />
+                </div>
+
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex justify-between text-sm text-gray-600"><span>Subtotal</span><span>Rs. {Math.round(subtotal)}</span></div>
+                  <div className="flex justify-between text-sm text-gray-600 mt-1"><span>GST (18%)</span><span>Rs. {Math.round(tax)}</span></div>
+                  <div className="flex justify-between text-lg font-bold mt-3"><span>Total</span><span className="text-blue-600">Rs. {Math.round(total)}</span></div>
+                </div>
+
+                <div className="space-y-2 pt-3">
+                  <Button className="w-full h-11 bg-green-600 hover:bg-green-700" onClick={() => handleCompleteSale(true)} disabled={createSaleMutation.isLoading || cart.length === 0}>
+                    Complete Sale (Ctrl+P)
+                  </Button>
+                  <Button variant="outline" className="w-full h-11" onClick={() => handleCompleteSale(false)} disabled={createSaleMutation.isLoading || cart.length === 0}>
+                    Create Bill (Ctrl+B)
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardContent className="text-sm text-gray-600">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2"><kbd className="bg-gray-100 px-2 rounded">F2</kbd> Search</div>
+                  <div className="text-xs">Shortcuts</div>
+                </div>
+                <div className="mt-3">
+                  <Button variant="ghost" onClick={() => { setCart([]); toast({ title: "Cart cleared" }); }}>Clear Cart</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
 
-      {/* Search Modal */}
+      {/* Search Modal - full screen style */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Search Products</DialogTitle>
-            <DialogDescription>Type and press Enter or click product to add instantly.</DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Search Products</DialogTitle>
+                <DialogDescription>Type and press Enter or click product to add instantly.</DialogDescription>
+              </div>
+              <div>
+                <Button variant="ghost" onClick={() => setSearchOpen(false)}>Close</Button>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="flex-1 flex flex-col">
-            <Input
-              placeholder="Search color code, name, or product..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 text-lg mb-4"
-              autoFocus
-            />
-            {isLoading ? (
-              <div className="grid grid-cols-3 gap-4">
-                {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32" />)}
-              </div>
-            ) : filteredColors.length === 0 ? (
-              <div className="text-center text-gray-500 mt-10">No products found</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto">
-                {filteredColors.map((c) => (
-                  <Card key={c.id} className="hover:shadow-md transition cursor-pointer"
-                    onClick={() => { addToCart(c, 1); }}>
-                    <CardContent className="p-4 space-y-2">
-                      <h3 className="font-semibold text-sm">{c.variant.product.company}</h3>
-                      <p className="text-xs text-gray-600">{c.variant.product.productName}</p>
-                      <div className="flex gap-1">
-                        <Badge variant="outline">{c.colorCode}</Badge>
-                        <Badge variant="outline">{c.variant.packingSize}</Badge>
-                      </div>
-                      <p className="font-semibold">Rs. {c.variant.rate}</p>
-                      <p className="text-xs text-gray-500">In Stock: {c.stockQuantity}</p>
-                      <Button size="sm" onClick={(e) => { e.stopPropagation(); setSelectedColor(c); setQuantity(1); setRate(parseFloat(c.variant.rate)); setConfirmOpen(true); }}>Add</Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+          <div className="flex-1 flex flex-col mt-2">
+            <div className="mb-4">
+              <Input
+                placeholder="Search color code, name, product or company..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-12 text-lg shadow-sm"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="h-36 bg-white rounded-lg p-4 shadow-sm">
+                      <Skeleton className="h-6 w-2/3 mb-2" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredColors.length === 0 ? (
+                <div className="text-center text-gray-500 mt-12">No products found</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredColors.map((c) => (
+                    <Card
+                      key={c.id}
+                      className="cursor-pointer hover:shadow-lg transition flex flex-col justify-between h-full"
+                      onClick={() => {
+                        // clicking card adds instantly qty=1
+                        addToCart(c, 1);
+                      }}
+                    >
+                      <CardContent className="p-4 flex flex-col justify-between h-full">
+                        <div>
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="text-sm font-semibold text-gray-900">{c.variant.product.company}</h3>
+                              <p className="text-xs text-gray-500 mt-0.5">{c.variant.product.productName}</p>
+                            </div>
+                            <div>{stockBadge(c.stockQuantity)}</div>
+                          </div>
+
+                          <div className="mt-3">
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <Badge variant="secondary" className="text-xs font-mono bg-blue-50 text-blue-700">{c.colorCode}</Badge>
+                              <Badge variant="outline" className="text-xs">{c.variant.packingSize}</Badge>
+                              <div className="text-sm font-medium ml-1">{c.colorName}</div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3">
+                            <div className="text-lg font-bold">Rs. {Math.round(parseFloat(c.variant.rate))}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between">
+                          <div className="text-xs text-gray-500">In Stock: {c.stockQuantity}</div>
+                          <Button
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={(e) => {
+                              e.stopPropagation(); // prevent card click (instant add)
+                              openConfirmFor(c);
+                            }}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Qty + Rate Confirm */}
+      {/* Confirm Qty & Rate Modal */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Confirm Quantity & Rate</DialogTitle>
-            <DialogDescription>{selectedColor?.colorCode} - {selectedColor?.colorName}</DialogDescription>
+            <DialogDescription>
+              {selectedColor ? `${selectedColor.variant.product.company} — ${selectedColor.colorName}` : "Confirm"}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-3">
-            <Label>Quantity</Label>
-            <div className="flex items-center justify-center gap-2">
-              <Button size="icon" variant="outline" onClick={() => setQuantity(Math.max(1, quantity - 1))}><Minus className="h-4 w-4" /></Button>
-              <Input type="number" className="w-20 text-center" value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value) || 1)} />
-              <Button size="icon" variant="outline" onClick={() => setQuantity(quantity + 1)}><Plus className="h-4 w-4" /></Button>
+
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Quantity</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Button size="icon" variant="outline" onClick={() => setConfirmQty(Math.max(1, confirmQty - 1))}><Minus className="h-4 w-4" /></Button>
+                <Input
+                  type="number"
+                  className="w-28 text-center"
+                  value={confirmQty}
+                  onChange={(e) => setConfirmQty(Math.max(1, Number(e.target.value) || 1))}
+                />
+                <Button size="icon" variant="outline" onClick={() => setConfirmQty(confirmQty + 1)}><Plus className="h-4 w-4" /></Button>
+              </div>
             </div>
-            <Label>Rate</Label>
-            <Input type="number" className="w-full" value={rate} onChange={(e) => setRate(parseFloat(e.target.value) || 0)} />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={() => { if (selectedColor) addToCart(selectedColor, quantity, rate); setConfirmOpen(false); }}>Add</Button>
+
+            <div>
+              <Label>Rate</Label>
+              <Input
+                type="number"
+                value={confirmRate}
+                onChange={(e) => setConfirmRate(e.target.value === "" ? "" : Number(e.target.value))}
+                className="mt-1"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+              <Button onClick={() => confirmAdd()}>Add</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
