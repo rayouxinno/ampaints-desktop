@@ -19,7 +19,7 @@ let serverReady = false;
 // Database path management
 function getDatabasePath(): string {
   let dbPath = store.get("databasePath");
-  
+
   if (!dbPath) {
     // Default to Documents/PaintPulse/paintpulse.db
     const documentsPath = app.getPath("documents");
@@ -27,7 +27,7 @@ function getDatabasePath(): string {
     dbPath = defaultPath;
     store.set("databasePath", defaultPath);
   }
-  
+
   return dbPath;
 }
 
@@ -41,12 +41,12 @@ async function selectDatabaseLocation(): Promise<string | null> {
     ],
     properties: ["createDirectory", "showOverwriteConfirmation"]
   });
-  
+
   if (!result.canceled && result.filePath) {
     store.set("databasePath", result.filePath);
     return result.filePath;
   }
-  
+
   return null;
 }
 
@@ -56,7 +56,7 @@ function createWindow() {
     width: 1400,
     height: 900
   };
-  
+
   mainWindow = new BrowserWindow({
     ...windowBounds,
     minWidth: 1024,
@@ -69,33 +69,33 @@ function createWindow() {
     title: "PaintPulse v1.4 FINAL - Paint Store Management",
     show: false, // Don't show until ready-to-show event
   });
-  
+
   // Save window bounds on resize/move
   mainWindow.on("resize", () => {
     if (!mainWindow) return;
     const bounds = mainWindow.getBounds();
     store.set("windowBounds", bounds);
   });
-  
+
   mainWindow.on("move", () => {
     if (!mainWindow) return;
     const bounds = mainWindow.getBounds();
     store.set("windowBounds", bounds);
   });
-  
+
   // Show window when ready
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
   });
-  
-  // Load app
+
+  // ✅ FIXED: Always load from local server (works for both dev and production)
+  mainWindow.loadURL("http://localhost:5000");
+
+  // Open DevTools in development
   if (process.env.NODE_ENV === "development") {
-    mainWindow.loadURL("http://localhost:5000");
     mainWindow.webContents.openDevTools();
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "../dist/public/index.html"));
   }
-  
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -118,7 +118,7 @@ ipcMain.handle("select-database-location", async () => {
 
 ipcMain.handle("export-database", async () => {
   const currentDbPath = getDatabasePath();
-  
+
   const result = await dialog.showSaveDialog({
     title: "Export Database",
     defaultPath: "paintpulse-backup.db",
@@ -127,7 +127,7 @@ ipcMain.handle("export-database", async () => {
       { name: "All Files", extensions: ["*"] }
     ],
   });
-  
+
   if (!result.canceled && result.filePath) {
     const fs = await import("fs/promises");
     try {
@@ -137,7 +137,7 @@ ipcMain.handle("export-database", async () => {
       return { success: false, error: (error as Error).message };
     }
   }
-  
+
   return { success: false, error: "Export cancelled" };
 });
 
@@ -150,18 +150,18 @@ ipcMain.handle("import-database", async () => {
     ],
     properties: ["openFile"],
   });
-  
+
   if (!result.canceled && result.filePaths.length > 0) {
     const newDbPath = result.filePaths[0];
     store.set("databasePath", newDbPath);
-    
+
     // Restart app to apply new database
     app.relaunch();
     app.exit();
-    
+
     return { success: true, path: newDbPath };
   }
-  
+
   return { success: false, error: "Import cancelled" };
 });
 
@@ -179,7 +179,7 @@ ipcMain.handle("set-activation-status", (_event, status: boolean) => {
 app.whenReady().then(async () => {
   // ✅ Set production mode for packaged app
   process.env.NODE_ENV = "production";
-  
+
   // ✅ CRITICAL FIX: Initialize electron-store with dynamic import
   const { default: ElectronStore } = await import("electron-store");
   store = new ElectronStore<StoreType>({
@@ -207,16 +207,19 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error("Error creating database directory:", error);
   }
-  
+
   // Set database path in server module
   process.env.DATABASE_PATH = dbPath;
-  
+
   // ✅ Start Express server (built to dist/index.js for correct path resolution)
   const serverPath = path.join(__dirname, "..", "dist", "index.js");
   const serverModule = await import(pathToFileURL(serverPath).href);
-  
-  createWindow();
-  
+
+  // ✅ Wait a moment for server to start before creating window
+  setTimeout(() => {
+    createWindow();
+  }, 1000);
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
