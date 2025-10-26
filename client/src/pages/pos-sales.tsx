@@ -171,108 +171,132 @@ export default function POSSales() {
 
   const getStockBadge = (stock: number) => {
     if (stock === 0) return <Badge variant="destructive">Out of Stock</Badge>;
-    if (stock < 10) return <Badge variant="secondary">Low ({stock})</Badge>;
-    return <Badge variant="default">Stock: {stock}</Badge>;
+    if (stock < 10) return <Badge variant="secondary">Low Stock</Badge>;
+    return <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">In Stock</Badge>;
   };
 
   return (
-    <div className="h-full p-6 overflow-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-full">
-        {/* Left Side - Product Search */}
+    <div className="min-h-screen p-6 bg-gray-50">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Products Section */}
         <div className="lg:col-span-2 space-y-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-pos-title">
-              POS Sales
-            </h1>
-            <p className="text-sm text-muted-foreground">Search by color code for fastest results</p>
+          <div className="bg-white rounded-lg p-6 shadow-sm">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">POS Sales</h1>
+            <p className="text-gray-600">Search by color code for fastest results</p>
           </div>
 
-          {/* Search Input */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by color code, name, product, or company..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (e.target.value && !searchOpen) setSearchOpen(true);
-              }}
-              onFocus={() => setSearchOpen(true)}
-              data-testid="input-search-products"
-              className="pl-10 h-12"
-            />
-          </div>
-
-          {isLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
+          {/* Search */}
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search by color code, name, product, or company..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (e.target.value && !searchOpen) setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                className="pl-10 h-12 border-gray-300 focus:border-blue-500"
+              />
             </div>
-          ) : colors.length === 0 ? (
-            <Card>
-              <CardContent className="p-12 text-center text-muted-foreground">
-                <Package2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No products available. Add colors in Stock Management first.</p>
-              </CardContent>
-            </Card>
-          ) : null}
+          </div>
+
+          {/* Loading State */}
+          {isLoading && (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-white rounded-lg p-6 shadow-sm">
+                  <Skeleton className="h-6 w-1/3 mb-4" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoading && colors.length === 0 && (
+            <div className="bg-white rounded-lg p-12 text-center shadow-sm">
+              <Package2 className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+              <p className="text-gray-600 text-lg">No products available</p>
+              <p className="text-gray-500 text-sm mt-2">Add colors in Stock Management first</p>
+            </div>
+          )}
 
           {/* Search Dialog */}
           <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-            <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Search Products</DialogTitle>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+              <DialogHeader className="pb-4">
+                <DialogTitle className="text-xl">Search Products</DialogTitle>
                 <DialogDescription>
                   Exact color code matches appear first
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              
+              <div className="flex-1 space-y-4 overflow-hidden">
                 <Input
                   placeholder="Type color code, name, product..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  data-testid="input-dialog-search"
                   className="w-full"
                   autoFocus
                 />
+                
                 {filteredColors.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
+                  <div className="text-center py-12 text-gray-500">
                     <Package2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No products found matching "{searchQuery}"</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto max-h-[400px] pr-2">
                     {filteredColors.map((color) => (
-                      <Card key={color.id} className="hover-elevate cursor-pointer" data-testid={`search-result-${color.id}`}>
-                        <CardContent className="p-4">
-                          <div className="flex justify-between items-start gap-3">
-                            <div className="flex-1 space-y-2">
-                              <div>
-                                <p className="font-semibold text-sm">{color.variant.product.company}</p>
-                                <p className="text-xs text-muted-foreground">{color.variant.product.productName}</p>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
-                                <Badge variant="outline" className="text-xs">{color.variant.packingSize}</Badge>
-                                <Badge variant="secondary" className="text-xs font-mono font-semibold">{color.colorCode}</Badge>
-                              </div>
-                              <p className="text-xs">{color.colorName}</p>
-                              <div className="flex items-center justify-between">
-                                <p className="text-base font-semibold">Rs. {Math.round(parseFloat(color.variant.rate))}</p>
-                                {getStockBadge(color.stockQuantity)}
-                              </div>
-                            </div>
+                      <div 
+                        key={color.id} 
+                        className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => addToCart(color)}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900 text-sm">
+                              {color.variant.product.company}
+                            </h3>
+                            <p className="text-gray-600 text-xs mt-1">
+                              {color.variant.product.productName}
+                            </p>
+                          </div>
+                          {getStockBadge(color.stockQuantity)}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant="outline" className="text-xs bg-blue-50">
+                              {color.variant.packingSize}
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs font-mono bg-gray-100">
+                              {color.colorCode}
+                            </Badge>
+                          </div>
+                          
+                          <p className="text-sm text-gray-700 font-medium">
+                            {color.colorName}
+                          </p>
+
+                          <div className="flex items-center justify-between pt-2">
+                            <span className="text-lg font-bold text-gray-900">
+                              Rs. {Math.round(parseFloat(color.variant.rate))}
+                            </span>
                             <Button
                               size="sm"
-                              onClick={() => addToCart(color)}
                               disabled={color.stockQuantity === 0}
-                              data-testid={`button-add-${color.id}`}
+                              className="bg-blue-600 hover:bg-blue-700"
                             >
                               <Plus className="h-4 w-4 mr-1" />
-                              Add
+                              Add to Cart
                             </Button>
                           </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -281,132 +305,139 @@ export default function POSSales() {
           </Dialog>
         </div>
 
-        {/* Right Side - Cart & Checkout */}
-        <div className="lg:col-span-1 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+        {/* Cart & Checkout Section */}
+        <div className="space-y-6">
+          {/* Cart */}
+          <Card className="shadow-sm">
+            <CardHeader className="bg-gray-50 border-b">
+              <CardTitle className="flex items-center gap-2 text-lg">
                 <ShoppingCart className="h-5 w-5" />
-                Cart ({cart.length})
+                Shopping Cart ({cart.length})
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-0">
               {cart.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center py-12 text-gray-500">
                   <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm">Cart is empty</p>
+                  <p className="text-sm">Your cart is empty</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                <div className="max-h-[400px] overflow-y-auto">
                   {cart.map((item) => (
-                    <Card key={item.colorId} data-testid={`cart-item-${item.colorId}`}>
-                      <CardContent className="p-3 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 space-y-1">
-                            <p className="text-sm font-medium">{item.color.variant.product.company}</p>
-                            <p className="text-xs text-muted-foreground">{item.color.variant.product.productName}</p>
-                            <div className="flex flex-wrap gap-1">
-                              <Badge variant="outline" className="text-xs">{item.color.variant.packingSize}</Badge>
-                              <Badge variant="outline" className="text-xs">{item.color.colorName}</Badge>
-                              <Badge variant="outline" className="text-xs font-mono">{item.color.colorCode}</Badge>
-                            </div>
+                    <div key={item.colorId} className="p-4 border-b border-gray-100 last:border-b-0">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-sm text-gray-900">
+                            {item.color.variant.product.company}
+                          </h4>
+                          <p className="text-gray-600 text-xs mt-1">
+                            {item.color.variant.product.productName}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            <Badge variant="outline" className="text-xs">
+                              {item.color.variant.packingSize}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {item.color.colorName}
+                            </Badge>
                           </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeFromCart(item.colorId)}
+                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="icon"
-                            onClick={() => removeFromCart(item.colorId)}
-                            data-testid={`button-remove-${item.colorId}`}
-                            className="h-8 w-8 shrink-0"
+                            className="h-8 w-8"
+                            onClick={() => updateQuantity(item.colorId, -1)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <span className="text-sm font-medium w-8 text-center">
+                            {item.quantity}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => updateQuantity(item.colorId, 1)}
+                          >
+                            <Plus className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQuantity(item.colorId, -1)}
-                              data-testid={`button-decrease-${item.colorId}`}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="text-sm font-medium w-8 text-center" data-testid={`quantity-${item.colorId}`}>
-                              {item.quantity}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQuantity(item.colorId, 1)}
-                              data-testid={`button-increase-${item.colorId}`}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-muted-foreground">Rs. {Math.round(item.rate)} each</p>
-                            <p className="text-sm font-semibold" data-testid={`subtotal-${item.colorId}`}>
-                              Rs. {Math.round(item.quantity * item.rate)}
-                            </p>
-                          </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-gray-900">
+                            Rs. {Math.round(item.quantity * item.rate)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Rs. {Math.round(item.rate)} each
+                          </p>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
 
               {cart.length > 0 && (
-                <div className="space-y-2 pt-4 border-t">
-                  <div className="flex justify-between text-sm">
-                    <span>Subtotal</span>
-                    <span data-testid="text-subtotal">Rs. {Math.round(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>GST (18%)</span>
-                    <span data-testid="text-tax">Rs. {Math.round(tax)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-semibold pt-2 border-t">
-                    <span>Total</span>
-                    <span data-testid="text-total">Rs. {Math.round(total)}</span>
+                <div className="p-4 bg-gray-50 border-t">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span className="font-medium">Rs. {Math.round(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">GST (18%)</span>
+                      <span className="font-medium">Rs. {Math.round(tax)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
+                      <span>Total</span>
+                      <span className="text-blue-600">Rs. {Math.round(total)}</span>
+                    </div>
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          {/* Customer Details */}
+          <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle>Customer Details</CardTitle>
+              <CardTitle className="text-lg">Customer Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="customerName" className="text-sm">Name</Label>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="customerName" className="text-sm font-medium">Name</Label>
                 <Input
                   id="customerName"
-                  placeholder="Customer name"
+                  placeholder="Enter customer name"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  data-testid="input-customer-name"
                   className="h-10"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="customerPhone" className="text-sm">Phone Number</Label>
+              <div className="space-y-2">
+                <Label htmlFor="customerPhone" className="text-sm font-medium">Phone Number</Label>
                 <Input
                   id="customerPhone"
                   type="tel"
-                  placeholder="Phone number"
+                  placeholder="Enter phone number"
                   value={customerPhone}
                   onChange={(e) => setCustomerPhone(e.target.value)}
-                  data-testid="input-customer-phone"
                   className="h-10"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="amountPaid" className="text-sm">Amount Paid (Optional)</Label>
+              <div className="space-y-2">
+                <Label htmlFor="amountPaid" className="text-sm font-medium">Amount Paid (Optional)</Label>
                 <Input
                   id="amountPaid"
                   type="number"
@@ -414,25 +445,22 @@ export default function POSSales() {
                   placeholder="0"
                   value={amountPaid}
                   onChange={(e) => setAmountPaid(e.target.value)}
-                  data-testid="input-amount-paid"
                   className="h-10"
                 />
               </div>
-              <div className="space-y-2 pt-2">
+              <div className="space-y-3 pt-2">
                 <Button
-                  className="w-full h-11"
+                  className="w-full h-11 bg-green-600 hover:bg-green-700"
                   onClick={() => handleCompleteSale(true)}
                   disabled={createSaleMutation.isPending || cart.length === 0}
-                  data-testid="button-complete-sale"
                 >
                   Complete Sale (Paid)
                 </Button>
                 <Button
                   variant="outline"
-                  className="w-full h-11"
+                  className="w-full h-11 border-gray-300"
                   onClick={() => handleCompleteSale(false)}
                   disabled={createSaleMutation.isPending || cart.length === 0}
-                  data-testid="button-partial-sale"
                 >
                   Create Bill (Unpaid/Partial)
                 </Button>
