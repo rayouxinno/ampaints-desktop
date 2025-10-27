@@ -60,7 +60,7 @@ export function AppSidebar() {
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
             <span className="text-lg font-bold text-primary-foreground">P</span>
           </div>
-          <span className="text-lg font-semibold">PaintPulse</span>
+          <span className="text-lg font-semibold">A.M Paints</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
