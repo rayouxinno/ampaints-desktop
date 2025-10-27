@@ -458,8 +458,8 @@ export default function POSSales() {
 
       {/* Search Modal */}
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-7xl h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-4 border-b">
             <div className="flex items-center justify-between">
               <div>
                 <DialogTitle>Search Products</DialogTitle>
@@ -473,8 +473,8 @@ export default function POSSales() {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 flex flex-col mt-2">
-            <div className="mb-4">
+          <div className="flex-1 flex flex-col p-6 pt-0">
+            <div className="py-4 sticky top-0 bg-white z-10">
               <Input
                 placeholder="Search color code, name, product or company..."
                 value={searchQuery}
@@ -484,10 +484,10 @@ export default function POSSales() {
               />
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto min-h-0">
               {isLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[...Array(6)].map((_, i) => (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {[...Array(12)].map((_, i) => (
                     <div
                       key={i}
                       className="h-36 bg-white rounded-lg p-4 shadow-sm"
@@ -499,38 +499,49 @@ export default function POSSales() {
                 </div>
               ) : filteredColors.length === 0 ? (
                 <div className="text-center text-gray-500 mt-12">
-                  No products found
+                  <Package2 className="mx-auto mb-4 h-16 w-16 opacity-40" />
+                  <p className="text-lg">No products found</p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Try searching with different keywords
+                  </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
                   {filteredColors.map((color) => (
                     <Card
                       key={color.id}
-                      className="cursor-pointer hover:shadow-md transition p-3 border border-gray-100"
+                      className="cursor-pointer hover:shadow-lg transition-all duration-200 p-4 border border-gray-200 hover:border-blue-300 hover:scale-[1.02]"
                       onClick={() => openConfirmFor(color)}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-800 text-sm">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-900 text-sm truncate">
                             {color.variant.product.productName}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-500 truncate mt-1">
                             {color.variant.product.company}
                           </div>
                         </div>
                         <StockQuantity stock={color.stock} />
                       </div>
 
-                      <div className="mt-2 text-xs text-gray-600 flex flex-wrap gap-2 items-center">
-                        <Badge variant="outline">{color.colorCode}</Badge>
-                        <Badge variant="outline">
+                      <div className="mt-3 text-xs text-gray-600 flex flex-wrap gap-2 items-center">
+                        <Badge variant="secondary" className="text-xs font-mono">
+                          {color.colorCode}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
                           {color.variant.packingSize}
                         </Badge>
-                        <span className="text-xs text-gray-700">{color.colorName}</span>
                       </div>
 
-                      <div className="mt-3 flex justify-between items-center">
-                        <div className="font-semibold text-blue-600">
+                      <div className="mt-3">
+                        <div className="text-sm text-gray-700 truncate">
+                          {color.colorName}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex justify-between items-center">
+                        <div className="font-bold text-blue-600 text-sm">
                           Rs. {Math.round(parseFloat(color.variant.rate))}
                         </div>
                         <div className="text-xs text-gray-500">
@@ -542,6 +553,15 @@ export default function POSSales() {
                 </div>
               )}
             </div>
+
+            {/* Results count */}
+            {!isLoading && filteredColors.length > 0 && (
+              <div className="pt-4 border-t border-gray-200 mt-4">
+                <p className="text-sm text-gray-500 text-center">
+                  Showing {filteredColors.length} of {colors.length} products
+                </p>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
