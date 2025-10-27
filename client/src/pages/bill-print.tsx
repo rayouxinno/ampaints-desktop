@@ -21,6 +21,15 @@ export default function BillPrint() {
     window.print();
   };
 
+  // Format date to dd-mm-yyyy
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -72,11 +81,11 @@ export default function BillPrint() {
             <div className="text-center border-b border-border pb-4">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
-                  <span className="text-xl font-bold text-primary-foreground">P</span>
+                  <span className="text-xl font-bold text-primary-foreground">AMP</span>
                 </div>
-                <h1 className="text-2xl font-bold">PaintPulse</h1>
+                <h1 className="text-2xl font-bold">A.M Paints</h1>
               </div>
-              <p className="text-sm text-muted-foreground">Paint Store Management System</p>
+              <p className="text-sm text-muted-foreground">Dunyapur Road, Basti Malook (Multan). 03008683395</p>
               <p className="text-xs text-muted-foreground mt-1">Invoice #{sale.id.slice(0, 8).toUpperCase()}</p>
             </div>
 
@@ -91,7 +100,7 @@ export default function BillPrint() {
               </div>
               <div>
                 <p className="text-muted-foreground mb-1">Date</p>
-                <p className="font-medium">{new Date(sale.createdAt).toLocaleDateString()}</p>
+                <p className="font-medium">{formatDate(sale.createdAt)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground mb-1">Time</p>
