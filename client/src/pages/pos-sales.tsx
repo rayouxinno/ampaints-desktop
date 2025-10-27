@@ -13,7 +13,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Search, Plus, Minus, Trash2, ShoppingCart, Package2 } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  Package2,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { ColorWithVariantAndProduct } from "@shared/schema";
@@ -30,29 +37,26 @@ export default function POSSales() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  // Cart + Customer
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
 
-  // Search modal
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Confirm modal
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
+  const [selectedColor, setSelectedColor] =
+    useState<ColorWithVariantAndProduct | null>(null);
   const [confirmQty, setConfirmQty] = useState(1);
   const [confirmRate, setConfirmRate] = useState<number | "">("");
 
-  // Load colors
-  const { data: colors = [], isLoading } = useQuery<ColorWithVariantAndProduct[]>({
-    queryKey: ["/api/colors"],
-  });
+  const { data: colors = [], isLoading } =
+    useQuery<ColorWithVariantAndProduct[]>({
+      queryKey: ["/api/colors"],
+    });
 
-  // Filter
   const filteredColors = useMemo(() => {
     if (!searchQuery) return colors;
     const q = searchQuery.toLowerCase().trim();
@@ -65,13 +69,15 @@ export default function POSSales() {
     );
   }, [colors, searchQuery]);
 
-  // GST toggle (you can later connect to settings)
   const enableGST = false;
   const subtotal = cart.reduce((s, i) => s + i.quantity * i.rate, 0);
   const tax = enableGST ? subtotal * 0.18 : 0;
   const total = subtotal + tax;
 
-  // Mutation
+  // ✅ Calculate remaining balance correctly
+  const paidAmount = parseFloat(amountPaid || "0");
+  const remainingBalance = Math.max(0, total - paidAmount);
+
   const createSaleMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/sales", data);
@@ -93,14 +99,12 @@ export default function POSSales() {
     },
   });
 
-  // Shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "F2") {
         e.preventDefault();
         setSearchOpen(true);
         setTimeout(() => searchInputRef.current?.focus(), 60);
-        return;
       }
       if (e.key === "Escape") {
         setSearchOpen(false);
@@ -119,17 +123,25 @@ export default function POSSales() {
     return () => window.removeEventListener("keydown", handler);
   }, [cart, customerName, customerPhone, amountPaid]);
 
-  // Cart functions
-  const addToCart = (color: ColorWithVariantAndProduct, qty = 1, rate?: number) => {
+  const addToCart = (
+    color: ColorWithVariantAndProduct,
+    qty = 1,
+    rate?: number
+  ) => {
     const effectiveRate = rate ?? parseFloat(color.variant.rate);
     setCart((prev) => {
       const existing = prev.find((p) => p.colorId === color.id);
       if (existing) {
         return prev.map((p) =>
-          p.colorId === color.id ? { ...p, quantity: p.quantity + qty, rate: effectiveRate } : p
+          p.colorId === color.id
+            ? { ...p, quantity: p.quantity + qty, rate: effectiveRate }
+            : p
         );
       }
-      return [...prev, { colorId: color.id, color, quantity: qty, rate: effectiveRate }];
+      return [
+        ...prev,
+        { colorId: color.id, color, quantity: qty, rate: effectiveRate },
+      ];
     });
     toast({ title: `${qty} x ${color.colorName} added to cart` });
   };
@@ -155,24 +167,32 @@ export default function POSSales() {
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
       prev.map((it) =>
-        it.colorId === id ? { ...it, quantity: Math.max(1, it.quantity + delta) } : it
+        it.colorId === id
+          ? { ...it, quantity: Math.max(1, it.quantity + delta) }
+          : it
       )
     );
   };
-  const removeFromCart = (id: string) => setCart((prev) => prev.filter((it) => it.colorId !== id));
+  const removeFromCart = (id: string) =>
+    setCart((prev) => prev.filter((it) => it.colorId !== id));
 
-  // Sale complete
   const handleCompleteSale = (isPaid: boolean) => {
     if (!customerName || !customerPhone) {
-      toast({ title: "Please enter customer name and phone", variant: "destructive" });
+      toast({
+        title: "Please enter customer name and phone",
+        variant: "destructive",
+      });
       return;
     }
     if (cart.length === 0) {
       toast({ title: "Cart is empty", variant: "destructive" });
       return;
     }
-    const paid = isPaid ? total : parseFloat(amountPaid || "0");
-    const paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
+
+    const paid = isPaid ? total : paidAmount;
+    const paymentStatus =
+      paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
+
     createSaleMutation.mutate({
       customerName,
       customerPhone,
@@ -188,18 +208,17 @@ export default function POSSales() {
     });
   };
 
-  // Stock badge
-  const stockBadge = (stock: number) => {
-    if (stock <= 0) return <Badge variant="destructive">Out</Badge>;
-    if (stock < 10) return <Badge variant="secondary">Low</Badge>;
+  // ✅ Show available stock quantity instead of badges
+  const stockInfo = (stock: number) => {
+    if (stock <= 0)
+      return <span className="text-red-500 font-medium">Out of stock</span>;
     return (
-      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
-        In
-      </Badge>
+      <span className="text-sm text-gray-700 font-medium">
+        Stock: {stock}
+      </span>
     );
   };
 
-  // Confirm modal keys
   useEffect(() => {
     if (!confirmOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -218,11 +237,14 @@ export default function POSSales() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header centered */}
+        {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">POS Sales</h1>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+            POS Sales
+          </h1>
           <p className="text-sm text-gray-500 mb-4">
-            Use <kbd className="bg-gray-100 px-2 rounded">F2</kbd> to open search
+            Use <kbd className="bg-gray-100 px-2 rounded">F2</kbd> to open
+            search
           </p>
           <div className="flex justify-center">
             <div className="relative w-full max-w-lg">
@@ -234,20 +256,20 @@ export default function POSSales() {
                 onFocus={() => setSearchOpen(true)}
                 placeholder="Search color code, name, or product..."
                 className="pl-10 h-11 shadow-sm text-center"
-                aria-label="Search products"
               />
             </div>
           </div>
         </div>
 
-        {/* Main Layout */}
+        {/* Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Cart Section */}
+          {/* Cart */}
           <div className="lg:col-span-2 space-y-6">
             <Card className="shadow-sm">
               <CardHeader className="bg-white border-b">
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <ShoppingCart className="h-5 w-5" /> Shopping Cart ({cart.length})
+                  <ShoppingCart className="h-5 w-5" /> Shopping Cart (
+                  {cart.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -302,16 +324,22 @@ export default function POSSales() {
                               size="icon"
                               variant="outline"
                               className="h-8 w-8"
-                              onClick={() => updateQuantity(it.colorId, -1)}
+                              onClick={() =>
+                                updateQuantity(it.colorId, -1)
+                              }
                             >
                               <Minus className="h-3 w-3" />
                             </Button>
-                            <div className="w-10 text-center text-sm">{it.quantity}</div>
+                            <div className="w-10 text-center text-sm">
+                              {it.quantity}
+                            </div>
                             <Button
                               size="icon"
                               variant="outline"
                               className="h-8 w-8"
-                              onClick={() => updateQuantity(it.colorId, 1)}
+                              onClick={() =>
+                                updateQuantity(it.colorId, 1)
+                              }
                             >
                               <Plus className="h-3 w-3" />
                             </Button>
@@ -333,7 +361,7 @@ export default function POSSales() {
             </Card>
           </div>
 
-          {/* Right Side: Customer Details */}
+          {/* Right Side */}
           <div className="space-y-6">
             <Card className="sticky top-6 shadow-sm">
               <CardHeader>
@@ -366,21 +394,31 @@ export default function POSSales() {
                   />
                 </div>
 
-                <div className="pt-2 border-t border-gray-100">
+                <div className="pt-2 border-t border-gray-100 space-y-1">
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Subtotal</span>
                     <span>Rs. {Math.round(subtotal)}</span>
                   </div>
                   {enableGST && (
-                    <div className="flex justify-between text-sm text-gray-600 mt-1">
+                    <div className="flex justify-between text-sm text-gray-600">
                       <span>GST (18%)</span>
                       <span>Rs. {Math.round(tax)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-lg font-bold mt-3">
+                  <div className="flex justify-between text-lg font-bold">
                     <span>Total</span>
-                    <span className="text-blue-600">Rs. {Math.round(total)}</span>
+                    <span className="text-blue-600">
+                      Rs. {Math.round(total)}
+                    </span>
                   </div>
+
+                  {/* ✅ Show remaining balance */}
+                  {paidAmount > 0 && (
+                    <div className="flex justify-between text-sm text-gray-700">
+                      <span>Remaining</span>
+                      <span>Rs. {Math.round(remainingBalance)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2 pt-3">
@@ -398,28 +436,6 @@ export default function POSSales() {
                     disabled={createSaleMutation.isLoading || cart.length === 0}
                   >
                     Create Bill (Ctrl+B)
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardContent className="text-sm text-gray-600">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <kbd className="bg-gray-100 px-2 rounded">F2</kbd> Search
-                  </div>
-                  <div className="text-xs">Shortcuts</div>
-                </div>
-                <div className="mt-3">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setCart([]);
-                      toast({ title: "Cart cleared" });
-                    }}
-                  >
-                    Clear Cart
                   </Button>
                 </div>
               </CardContent>
@@ -460,14 +476,19 @@ export default function POSSales() {
               {isLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {[...Array(6)].map((_, i) => (
-                    <div key={i} className="h-36 bg-white rounded-lg p-4 shadow-sm">
+                    <div
+                      key={i}
+                      className="h-36 bg-white rounded-lg p-4 shadow-sm"
+                    >
                       <Skeleton className="h-6 w-2/3 mb-2" />
                       <Skeleton className="h-4 w-1/2" />
                     </div>
                   ))}
                 </div>
               ) : filteredColors.length === 0 ? (
-                <div className="text-center text-gray-500 mt-12">No products found</div>
+                <div className="text-center text-gray-500 mt-12">
+                  No products found
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredColors.map((color) => (
@@ -485,12 +506,14 @@ export default function POSSales() {
                             {color.variant.product.company}
                           </div>
                         </div>
-                        {stockBadge(color.stock)}
+                        {stockInfo(color.stock)}
                       </div>
 
                       <div className="mt-2 text-xs text-gray-600 flex flex-wrap gap-2">
                         <Badge variant="outline">{color.colorCode}</Badge>
-                        <Badge variant="outline">{color.variant.packingSize}</Badge>
+                        <Badge variant="outline">
+                          {color.variant.packingSize}
+                        </Badge>
                         <span>{color.colorName}</span>
                       </div>
 
@@ -506,7 +529,7 @@ export default function POSSales() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Add Modal */}
+      {/* Confirm Add */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
@@ -515,7 +538,9 @@ export default function POSSales() {
           {selectedColor && (
             <div className="space-y-4">
               <div>
-                <div className="text-sm font-medium">{selectedColor.colorName}</div>
+                <div className="text-sm font-medium">
+                  {selectedColor.colorName}
+                </div>
                 <div className="text-xs text-gray-500">
                   {selectedColor.variant.product.productName} -{" "}
                   {selectedColor.variant.product.company}
@@ -527,7 +552,9 @@ export default function POSSales() {
                     size="icon"
                     variant="outline"
                     className="h-8 w-8"
-                    onClick={() => setConfirmQty((q) => Math.max(1, q - 1))}
+                    onClick={() =>
+                      setConfirmQty((q) => Math.max(1, q - 1))
+                    }
                   >
                     <Minus className="h-3 w-3" />
                   </Button>
@@ -550,7 +577,9 @@ export default function POSSales() {
                   type="number"
                   placeholder="Rate"
                   value={confirmRate}
-                  onChange={(e) => setConfirmRate(e.target.value ? Number(e.target.value) : "")}
+                  onChange={(e) =>
+                    setConfirmRate(e.target.value ? Number(e.target.value) : "")
+                  }
                   className="w-28 h-8 text-center"
                 />
               </div>
