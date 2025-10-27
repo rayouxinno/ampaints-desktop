@@ -74,6 +74,7 @@ export default function POSSales() {
   const tax = enableGST ? subtotal * 0.18 : 0;
   const total = subtotal + tax;
 
+  // ✅ Calculate remaining balance correctly
   const paidAmount = parseFloat(amountPaid || "0");
   const remainingBalance = Math.max(0, total - paidAmount);
 
@@ -205,6 +206,17 @@ export default function POSSales() {
         subtotal: it.quantity * it.rate,
       })),
     });
+  };
+
+  // ✅ Show available stock quantity instead of badges
+  const stockInfo = (stock: number) => {
+    if (stock <= 0)
+      return <span className="text-red-500 font-medium">Out of stock</span>;
+    return (
+      <span className="text-sm text-gray-700 font-medium">
+        Stock: {stock}
+      </span>
+    );
   };
 
   useEffect(() => {
@@ -400,6 +412,7 @@ export default function POSSales() {
                     </span>
                   </div>
 
+                  {/* ✅ Show remaining balance */}
                   {paidAmount > 0 && (
                     <div className="flex justify-between text-sm text-gray-700">
                       <span>Remaining</span>
@@ -481,12 +494,8 @@ export default function POSSales() {
                   {filteredColors.map((color) => (
                     <Card
                       key={color.id}
-                      className={`cursor-pointer hover:shadow-md transition p-3 border border-gray-100 ${
-                        color.stock <= 0 ? "opacity-60 cursor-not-allowed" : ""
-                      }`}
-                      onClick={() =>
-                        color.stock > 0 && openConfirmFor(color)
-                      }
+                      className="cursor-pointer hover:shadow-md transition p-3 border border-gray-100"
+                      onClick={() => openConfirmFor(color)}
                     >
                       <div className="flex justify-between items-start">
                         <div>
@@ -497,33 +506,19 @@ export default function POSSales() {
                             {color.variant.product.company}
                           </div>
                         </div>
-
-                        {/* ✅ Improved stock label */}
-                        <div
-                          className={`text-xs font-semibold ${
-                            color.stock <= 0
-                              ? "text-red-600 bg-red-50 px-2 py-1 rounded"
-                              : "text-green-700 bg-green-50 px-2 py-1 rounded"
-                          }`}
-                        >
-                          {color.stock <= 0
-                            ? "Out of Stock"
-                            : `Available: ${color.stock}`}
-                        </div>
+                        {stockInfo(color.stock)}
                       </div>
 
-                      <div className="mt-2 flex flex-wrap gap-2 items-center">
+                      <div className="mt-2 text-xs text-gray-600 flex flex-wrap gap-2">
                         <Badge variant="outline">{color.colorCode}</Badge>
                         <Badge variant="outline">
                           {color.variant.packingSize}
                         </Badge>
-                        <div className="text-sm text-gray-700 ml-1">
-                          {color.colorName}
-                        </div>
+                        <span>{color.colorName}</span>
                       </div>
 
-                      <div className="mt-2 text-right text-sm font-medium text-gray-700">
-                        Rs. {Math.round(parseFloat(color.variant.rate))}
+                      <div className="mt-3 font-semibold text-blue-600">
+                        Rs. {color.variant.rate}
                       </div>
                     </Card>
                   ))}
@@ -534,59 +529,63 @@ export default function POSSales() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Quantity Dialog */}
+      {/* Confirm Add */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add to Cart</DialogTitle>
+            <DialogTitle>Add Item</DialogTitle>
           </DialogHeader>
           {selectedColor && (
             <div className="space-y-4">
-              <div className="text-gray-700">
-                <div className="font-medium">
-                  {selectedColor.variant.product.productName}
+              <div>
+                <div className="text-sm font-medium">
+                  {selectedColor.colorName}
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-xs text-gray-500">
+                  {selectedColor.variant.product.productName} -{" "}
                   {selectedColor.variant.product.company}
                 </div>
-                <div className="mt-1 text-sm text-gray-600">
-                  {selectedColor.colorName} — {selectedColor.colorCode}
-                </div>
               </div>
-
-              <div className="flex gap-4 items-center">
-                <div className="flex-1">
-                  <Label>Quantity</Label>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() =>
+                      setConfirmQty((q) => Math.max(1, q - 1))
+                    }
+                  >
+                    <Minus className="h-3 w-3" />
+                  </Button>
                   <Input
                     type="number"
-                    min="1"
                     value={confirmQty}
-                    onChange={(e) =>
-                      setConfirmQty(parseInt(e.target.value) || 1)
-                    }
-                    className="h-10"
+                    onChange={(e) => setConfirmQty(Number(e.target.value))}
+                    className="w-16 text-center h-8"
                   />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() => setConfirmQty((q) => q + 1)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
                 </div>
-                <div className="flex-1">
-                  <Label>Rate</Label>
-                  <Input
-                    type="number"
-                    value={confirmRate}
-                    onChange={(e) =>
-                      setConfirmRate(
-                        e.target.value === "" ? "" : Number(e.target.value)
-                      )
-                    }
-                    className="h-10"
-                  />
-                </div>
+                <Input
+                  type="number"
+                  placeholder="Rate"
+                  value={confirmRate}
+                  onChange={(e) =>
+                    setConfirmRate(e.target.value ? Number(e.target.value) : "")
+                  }
+                  className="w-28 h-8 text-center"
+                />
               </div>
-
-              <div className="pt-2 flex justify-end">
-                <Button onClick={confirmAdd} className="px-6">
-                  Add
-                </Button>
-              </div>
+              <Button className="w-full" onClick={confirmAdd}>
+                Add to Cart
+              </Button>
             </div>
           )}
         </DialogContent>
