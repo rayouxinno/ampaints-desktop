@@ -208,15 +208,27 @@ export default function POSSales() {
     });
   };
 
-  // ✅ Show available stock quantity instead of badges
-  const stockInfo = (stock: number) => {
-    if (stock <= 0)
-      return <span className="text-red-500 font-medium">Out of stock</span>;
-    return (
-      <span className="text-sm text-gray-700 font-medium">
-        Stock: {stock}
-      </span>
-    );
+  // ✅ Stock quantity display component
+  const StockQuantity = ({ stock }: { stock: number }) => {
+    if (stock <= 0) {
+      return (
+        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">
+          Out of Stock
+        </Badge>
+      );
+    } else if (stock <= 10) {
+      return (
+        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
+          Low Stock: {stock}
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+          In Stock: {stock}
+        </Badge>
+      );
+    }
   };
 
   useEffect(() => {
@@ -497,8 +509,8 @@ export default function POSSales() {
                       className="cursor-pointer hover:shadow-md transition p-3 border border-gray-100"
                       onClick={() => openConfirmFor(color)}
                     >
-                      <div className="flex justify-between items-start">
-                        <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
                           <div className="font-medium text-gray-800 text-sm">
                             {color.variant.product.productName}
                           </div>
@@ -506,19 +518,24 @@ export default function POSSales() {
                             {color.variant.product.company}
                           </div>
                         </div>
-                        {stockInfo(color.stock)}
+                        <StockQuantity stock={color.stock} />
                       </div>
 
-                      <div className="mt-2 text-xs text-gray-600 flex flex-wrap gap-2">
+                      <div className="mt-2 text-xs text-gray-600 flex flex-wrap gap-2 items-center">
                         <Badge variant="outline">{color.colorCode}</Badge>
                         <Badge variant="outline">
                           {color.variant.packingSize}
                         </Badge>
-                        <span>{color.colorName}</span>
+                        <span className="text-xs text-gray-700">{color.colorName}</span>
                       </div>
 
-                      <div className="mt-3 font-semibold text-blue-600">
-                        Rs. {color.variant.rate}
+                      <div className="mt-3 flex justify-between items-center">
+                        <div className="font-semibold text-blue-600">
+                          Rs. {color.variant.rate}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          Available: {color.stock}
+                        </div>
                       </div>
                     </Card>
                   ))}
@@ -544,6 +561,9 @@ export default function POSSales() {
                 <div className="text-xs text-gray-500">
                   {selectedColor.variant.product.productName} -{" "}
                   {selectedColor.variant.product.company}
+                </div>
+                <div className="mt-1">
+                  <StockQuantity stock={selectedColor.stock} />
                 </div>
               </div>
               <div className="flex items-center gap-3">
