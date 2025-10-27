@@ -208,24 +208,24 @@ export default function POSSales() {
     });
   };
 
-  // ✅ Stock quantity display component
+  // ✅ Stock quantity display component - Show actual numbers
   const StockQuantity = ({ stock }: { stock: number }) => {
     if (stock <= 0) {
       return (
         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">
-          Out of Stock
+          {stock}
         </Badge>
       );
     } else if (stock <= 10) {
       return (
         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
-          Low Stock: {stock}
+          {stock}
         </Badge>
       );
     } else {
       return (
         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
-          In Stock: {stock}
+          {stock}
         </Badge>
       );
     }
@@ -531,10 +531,10 @@ export default function POSSales() {
 
                       <div className="mt-3 flex justify-between items-center">
                         <div className="font-semibold text-blue-600">
-                          Rs. {color.variant.rate}
+                          Rs. {Math.round(parseFloat(color.variant.rate))}
                         </div>
                         <div className="text-xs text-gray-500">
-                          Available: {color.stock}
+                          Stock: {color.stock}
                         </div>
                       </div>
                     </Card>
