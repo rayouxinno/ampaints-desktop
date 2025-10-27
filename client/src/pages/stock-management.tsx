@@ -37,6 +37,9 @@ import {
   Trash,
   ChevronDown,
   ChevronUp,
+  Eye,
+  Edit,
+  MoreVertical,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -47,6 +50,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, VariantWithProduct, ColorWithVariantAndProduct } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /* -------------------------
    Validation schemas
@@ -99,6 +108,16 @@ export default function StockManagement() {
   const [isVariantDialogOpen, setIsVariantDialogOpen] = useState(false);
   const [isColorDialogOpen, setIsColorDialogOpen] = useState(false);
   const [isStockInDialogOpen, setIsStockInDialogOpen] = useState(false);
+
+  /* Edit states */
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingVariant, setEditingVariant] = useState<VariantWithProduct | null>(null);
+  const [editingColor, setEditingColor] = useState<ColorWithVariantAndProduct | null>(null);
+
+  /* Detail view states */
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+  const [viewingVariant, setViewingVariant] = useState<VariantWithProduct | null>(null);
+  const [viewingColor, setViewingColor] = useState<ColorWithVariantAndProduct | null>(null);
 
   /* Quick Add wizard */
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
@@ -211,6 +230,39 @@ export default function StockManagement() {
     },
   });
 
+  const updateProductMutation = useMutation({
+    mutationFn: async (data: { id: string; company: string; productName: string }) => {
+      const res = await apiRequest("PUT", `/api/products/${data.id}`, {
+        company: data.company,
+        productName: data.productName,
+      });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Product updated successfully" });
+      setEditingProduct(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update product", variant: "destructive" });
+    },
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/products/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/variants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
+      toast({ title: "Product deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete product", variant: "destructive" });
+    },
+  });
+
   const createVariantSingleMutation = useMutation({
     mutationFn: async (data: z.infer<typeof variantFormSchema>) => {
       const res = await apiRequest("POST", "/api/variants", { ...data, rate: parseFloat(data.rate) });
@@ -224,6 +276,39 @@ export default function StockManagement() {
     },
     onError: () => {
       toast({ title: "Failed to create variant", variant: "destructive" });
+    },
+  });
+
+  const updateVariantMutation = useMutation({
+    mutationFn: async (data: { id: string; productId: string; packingSize: string; rate: number }) => {
+      const res = await apiRequest("PUT", `/api/variants/${data.id}`, {
+        productId: data.productId,
+        packingSize: data.packingSize,
+        rate: data.rate,
+      });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/variants"] });
+      toast({ title: "Variant updated successfully" });
+      setEditingVariant(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update variant", variant: "destructive" });
+    },
+  });
+
+  const deleteVariantMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/variants/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/variants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
+      toast({ title: "Variant deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete variant", variant: "destructive" });
     },
   });
 
@@ -241,6 +326,41 @@ export default function StockManagement() {
     },
     onError: () => {
       toast({ title: "Failed to add color", variant: "destructive" });
+    },
+  });
+
+  const updateColorMutation = useMutation({
+    mutationFn: async (data: { id: string; variantId: string; colorName: string; colorCode: string; stockQuantity: number }) => {
+      const res = await apiRequest("PUT", `/api/colors/${data.id}`, {
+        variantId: data.variantId,
+        colorName: data.colorName,
+        colorCode: data.colorCode,
+        stockQuantity: data.stockQuantity,
+      });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
+      toast({ title: "Color updated successfully" });
+      setEditingColor(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to update color", variant: "destructive" });
+    },
+  });
+
+  const deleteColorMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/colors/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
+      toast({ title: "Color deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete color", variant: "destructive" });
     },
   });
 
@@ -781,6 +901,7 @@ export default function StockManagement() {
                       <TableHead>Product Name</TableHead>
                       <TableHead>Variants</TableHead>
                       <TableHead>Created</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -792,6 +913,36 @@ export default function StockManagement() {
                           <TableCell>{product.productName}</TableCell>
                           <TableCell><Badge variant="outline">{productVariants.length} variants</Badge></TableCell>
                           <TableCell className="text-muted-foreground">{new Date(product.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setViewingProduct(product)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setEditingProduct(product)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to delete "${product.productName}"? This will also delete all associated variants and colors.`)) {
+                                      deleteProductMutation.mutate(product.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -870,6 +1021,7 @@ export default function StockManagement() {
                       <TableHead>Packing Size</TableHead>
                       <TableHead>Rate</TableHead>
                       <TableHead>Colors</TableHead>
+                      <TableHead className="w-[100px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -882,6 +1034,36 @@ export default function StockManagement() {
                           <TableCell>{variant.packingSize}</TableCell>
                           <TableCell>Rs. {Math.round(parseFloat(variant.rate))}</TableCell>
                           <TableCell><Badge variant="outline">{variantColors.length} colors</Badge></TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setViewingVariant(variant)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setEditingVariant(variant)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to delete "${variant.packingSize}" variant? This will also delete all associated colors.`)) {
+                                      deleteVariantMutation.mutate(variant.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -980,6 +1162,7 @@ export default function StockManagement() {
                         <TableHead>Color Code</TableHead>
                         <TableHead>Stock</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="w-[100px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -992,6 +1175,36 @@ export default function StockManagement() {
                           <TableCell><Badge variant="outline">{color.colorCode}</Badge></TableCell>
                           <TableCell>{color.stockQuantity}</TableCell>
                           <TableCell>{getStockBadge(color.stockQuantity)}</TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setViewingColor(color)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setEditingColor(color)}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to delete "${color.colorName}" (${color.colorCode})?`)) {
+                                      deleteColorMutation.mutate(color.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1047,14 +1260,33 @@ export default function StockManagement() {
                                   Current Stock: <span className="font-semibold text-foreground">{color.stockQuantity}</span>
                                 </p>
                               </div>
-                              <Button size="sm" onClick={() => {
-                                stockInForm.setValue("colorId", color.id);
-                                stockInForm.setValue("quantity", "");
-                                setSelectedColorForStockIn(color);
-                                setIsStockInDialogOpen(true);
-                              }}>
-                                <Plus className="h-4 w-4 mr-1" /> Add
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={() => {
+                                  stockInForm.setValue("colorId", color.id);
+                                  stockInForm.setValue("quantity", "");
+                                  setSelectedColorForStockIn(color);
+                                  setIsStockInDialogOpen(true);
+                                }}>
+                                  <Plus className="h-4 w-4 mr-1" /> Add Stock
+                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => setViewingColor(color)}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setEditingColor(color)}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -1168,6 +1400,292 @@ export default function StockManagement() {
           </Dialog>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Dialogs */}
+      {/* Edit Product Dialog */}
+      <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+          </DialogHeader>
+          <Form {...productForm}>
+            <form onSubmit={productForm.handleSubmit((data) => {
+              if (editingProduct) {
+                updateProductMutation.mutate({ id: editingProduct.id, ...data });
+              }
+            })} className="space-y-4">
+              <FormField control={productForm.control} name="company" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={productForm.control} name="productName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setEditingProduct(null)}>Cancel</Button>
+                <Button type="submit" disabled={updateProductMutation.isPending}>
+                  {updateProductMutation.isPending ? "Updating..." : "Update Product"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Variant Dialog */}
+      <Dialog open={!!editingVariant} onOpenChange={(open) => !open && setEditingVariant(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Variant</DialogTitle>
+          </DialogHeader>
+          <Form {...variantForm}>
+            <form onSubmit={variantForm.handleSubmit((data) => {
+              if (editingVariant) {
+                updateVariantMutation.mutate({ 
+                  id: editingVariant.id, 
+                  ...data, 
+                  rate: parseFloat(data.rate) 
+                });
+              }
+            })} className="space-y-4">
+              <FormField control={variantForm.control} name="productId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.company} - {p.productName}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={variantForm.control} name="packingSize" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Packing Size</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={variantForm.control} name="rate" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Rate (Rs.)</FormLabel>
+                  <FormControl><Input type="number" step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setEditingVariant(null)}>Cancel</Button>
+                <Button type="submit" disabled={updateVariantMutation.isPending}>
+                  {updateVariantMutation.isPending ? "Updating..." : "Update Variant"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Color Dialog */}
+      <Dialog open={!!editingColor} onOpenChange={(open) => !open && setEditingColor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Color</DialogTitle>
+          </DialogHeader>
+          <Form {...colorForm}>
+            <form onSubmit={colorForm.handleSubmit((data) => {
+              if (editingColor) {
+                updateColorMutation.mutate({ 
+                  id: editingColor.id, 
+                  ...data, 
+                  stockQuantity: parseInt(data.stockQuantity, 10) 
+                });
+              }
+            })} className="space-y-4">
+              <FormField control={colorForm.control} name="variantId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Variant (Product + Size)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Select variant" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {variantsData.map(v => <SelectItem key={v.id} value={v.id}>{v.product.company} - {v.product.productName} ({v.packingSize})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={colorForm.control} name="colorName" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Color Name</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={colorForm.control} name="colorCode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Color Code</FormLabel>
+                  <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={colorForm.control} name="stockQuantity" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Quantity</FormLabel>
+                  <FormControl><Input type="number" min="0" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setEditingColor(null)}>Cancel</Button>
+                <Button type="submit" disabled={updateColorMutation.isPending}>
+                  {updateColorMutation.isPending ? "Updating..." : "Update Color"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Detail Dialogs */}
+      {/* View Product Details */}
+      <Dialog open={!!viewingProduct} onOpenChange={(open) => !open && setViewingProduct(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Product Details</DialogTitle>
+          </DialogHeader>
+          {viewingProduct && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Company</Label>
+                  <p className="text-sm">{viewingProduct.company}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Product Name</Label>
+                  <p className="text-sm">{viewingProduct.productName}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Created Date</Label>
+                  <p className="text-sm">{new Date(viewingProduct.createdAt).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Variants Count</Label>
+                  <p className="text-sm">{variantsData.filter(v => v.productId === viewingProduct.id).length}</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setViewingProduct(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View Variant Details */}
+      <Dialog open={!!viewingVariant} onOpenChange={(open) => !open && setViewingVariant(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Variant Details</DialogTitle>
+          </DialogHeader>
+          {viewingVariant && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Company</Label>
+                  <p className="text-sm">{viewingVariant.product.company}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Product Name</Label>
+                  <p className="text-sm">{viewingVariant.product.productName}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Packing Size</Label>
+                  <p className="text-sm">{viewingVariant.packingSize}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Rate</Label>
+                  <p className="text-sm">Rs. {Math.round(parseFloat(viewingVariant.rate))}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Colors Count</Label>
+                  <p className="text-sm">{colorsData.filter(c => c.variantId === viewingVariant.id).length}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Created Date</Label>
+                  <p className="text-sm">{new Date(viewingVariant.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setViewingVariant(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View Color Details */}
+      <Dialog open={!!viewingColor} onOpenChange={(open) => !open && setViewingColor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Color Details</DialogTitle>
+          </DialogHeader>
+          {viewingColor && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Company</Label>
+                  <p className="text-sm">{viewingColor.variant.product.company}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Product Name</Label>
+                  <p className="text-sm">{viewingColor.variant.product.productName}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Packing Size</Label>
+                  <p className="text-sm">{viewingColor.variant.packingSize}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Rate</Label>
+                  <p className="text-sm">Rs. {Math.round(parseFloat(viewingColor.variant.rate))}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Color Name</Label>
+                  <p className="text-sm">{viewingColor.colorName}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Color Code</Label>
+                  <p className="text-sm font-mono">{viewingColor.colorCode}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Stock Quantity</Label>
+                  <p className="text-sm">{viewingColor.stockQuantity}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Stock Status</Label>
+                  <div className="text-sm">{getStockBadge(viewingColor.stockQuantity)}</div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Created Date</Label>
+                  <p className="text-sm">{new Date(viewingColor.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setViewingColor(null)}>Close</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
