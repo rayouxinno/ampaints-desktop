@@ -1,3 +1,4 @@
+// pos-sales.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -20,17 +21,40 @@ import {
   Trash2,
   ShoppingCart,
   Package2,
+  User,
+  Phone,
+  Calendar,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { ColorWithVariantAndProduct } from "@shared/schema";
+import type { ColorWithVariantAndProduct, Sale } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface CartItem {
   colorId: string;
   color: ColorWithVariantAndProduct;
   quantity: number;
   rate: number;
+}
+
+interface CustomerSuggestion {
+  customerName: string;
+  customerPhone: string;
+  lastSaleDate: string;
+  totalSpent: number;
 }
 
 export default function POSSales() {
@@ -41,6 +65,7 @@ export default function POSSales() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
+  const [customerSuggestionsOpen, setCustomerSuggestionsOpen] = useState(false);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,6 +81,14 @@ export default function POSSales() {
     useQuery<ColorWithVariantAndProduct[]>({
       queryKey: ["/api/colors"],
     });
+
+  const { data: customerSuggestions = [] } = useQuery<CustomerSuggestion[]>({
+    queryKey: ["/api/customers/suggestions"],
+  });
+
+  const { data: recentSales = [] } = useQuery<Sale[]>({
+    queryKey: ["/api/sales/recent"],
+  });
 
   const filteredColors = useMemo(() => {
     if (!searchQuery) return colors;
@@ -74,7 +107,6 @@ export default function POSSales() {
   const tax = enableGST ? subtotal * 0.18 : 0;
   const total = subtotal + tax;
 
-  // ✅ Calculate remaining balance correctly
   const paidAmount = parseFloat(amountPaid || "0");
   const remainingBalance = Math.max(0, total - paidAmount);
 
@@ -87,6 +119,7 @@ export default function POSSales() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
       queryClient.invalidateQueries({ queryKey: ["/api/sales"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers/suggestions"] });
       toast({ title: "Sale completed successfully" });
       setCart([]);
       setCustomerName("");
@@ -109,6 +142,7 @@ export default function POSSales() {
       if (e.key === "Escape") {
         setSearchOpen(false);
         setConfirmOpen(false);
+        setCustomerSuggestionsOpen(false);
       }
       if (e.ctrlKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
@@ -117,6 +151,10 @@ export default function POSSales() {
       if (e.ctrlKey && e.key.toLowerCase() === "b") {
         e.preventDefault();
         handleCompleteSale(false);
+      }
+      if (e.ctrlKey && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        setCustomerSuggestionsOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
@@ -129,12 +167,32 @@ export default function POSSales() {
     rate?: number
   ) => {
     const effectiveRate = rate ?? parseFloat(color.variant.rate);
+    
+    // Check stock availability
+    if (qty > color.stockQuantity) {
+      toast({ 
+        title: "Insufficient stock", 
+        description: `Only ${color.stockQuantity} units available`,
+        variant: "destructive" 
+      });
+      return;
+    }
+
     setCart((prev) => {
       const existing = prev.find((p) => p.colorId === color.id);
       if (existing) {
+        const newQuantity = existing.quantity + qty;
+        if (newQuantity > color.stockQuantity) {
+          toast({ 
+            title: "Insufficient stock", 
+            description: `Only ${color.stockQuantity} units available`,
+            variant: "destructive" 
+          });
+          return prev;
+        }
         return prev.map((p) =>
           p.colorId === color.id
-            ? { ...p, quantity: p.quantity + qty, rate: effectiveRate }
+            ? { ...p, quantity: newQuantity, rate: effectiveRate }
             : p
         );
       }
@@ -156,6 +214,16 @@ export default function POSSales() {
   const confirmAdd = () => {
     if (!selectedColor) return;
     const qty = Math.max(1, Math.floor(confirmQty));
+    
+    if (qty > selectedColor.stockQuantity) {
+      toast({ 
+        title: "Insufficient stock", 
+        description: `Only ${selectedColor.stockQuantity} units available`,
+        variant: "destructive" 
+      });
+      return;
+    }
+
     const r = Number(confirmRate) || parseFloat(selectedColor.variant.rate);
     addToCart(selectedColor, qty, r);
     setConfirmOpen(false);
@@ -166,13 +234,24 @@ export default function POSSales() {
 
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
-      prev.map((it) =>
-        it.colorId === id
-          ? { ...it, quantity: Math.max(1, it.quantity + delta) }
-          : it
-      )
+      prev.map((it) => {
+        if (it.colorId === id) {
+          const newQuantity = Math.max(1, it.quantity + delta);
+          if (newQuantity > it.color.stockQuantity) {
+            toast({ 
+              title: "Insufficient stock", 
+              description: `Only ${it.color.stockQuantity} units available`,
+              variant: "destructive" 
+            });
+            return it;
+          }
+          return { ...it, quantity: newQuantity };
+        }
+        return it;
+      })
     );
   };
+
   const removeFromCart = (id: string) =>
     setCart((prev) => prev.filter((it) => it.colorId !== id));
 
@@ -208,18 +287,23 @@ export default function POSSales() {
     });
   };
 
-  // ✅ Stock quantity display component - Show actual numbers
+  const selectCustomer = (customer: CustomerSuggestion) => {
+    setCustomerName(customer.customerName);
+    setCustomerPhone(customer.customerPhone);
+    setCustomerSuggestionsOpen(false);
+  };
+
   const StockQuantity = ({ stock }: { stock: number }) => {
     if (stock <= 0) {
       return (
         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">
-          {stock}
+          Out of Stock
         </Badge>
       );
     } else if (stock <= 10) {
       return (
         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
-          {stock}
+          Low: {stock}
         </Badge>
       );
     } else {
@@ -255,8 +339,8 @@ export default function POSSales() {
             POS Sales
           </h1>
           <p className="text-sm text-gray-500 mb-4">
-            Use <kbd className="bg-gray-100 px-2 rounded">F2</kbd> to open
-            search
+            Use <kbd className="bg-gray-100 px-2 rounded">F2</kbd> to search products • 
+            <kbd className="bg-gray-100 px-2 rounded mx-1">Ctrl+S</kbd> for customer suggestions
           </p>
           <div className="flex justify-center">
             <div className="relative w-full max-w-lg">
@@ -327,6 +411,7 @@ export default function POSSales() {
                             <div className="text-sm text-gray-700 ml-1">
                               {it.color.colorName}
                             </div>
+                            <StockQuantity stock={it.color.stockQuantity - it.quantity} />
                           </div>
                         </div>
 
@@ -382,11 +467,60 @@ export default function POSSales() {
               <CardContent className="space-y-3">
                 <div>
                   <Label>Name</Label>
-                  <Input
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="h-10"
-                  />
+                  <Popover open={customerSuggestionsOpen} onOpenChange={setCustomerSuggestionsOpen}>
+                    <PopoverTrigger asChild>
+                      <div className="relative">
+                        <Input
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className="h-10 pr-10"
+                          placeholder="Type or select customer"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-10 px-3"
+                          onClick={() => setCustomerSuggestionsOpen(true)}
+                        >
+                          <User className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-96 p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search customers..." />
+                        <CommandList>
+                          <CommandEmpty>No customers found.</CommandEmpty>
+                          <CommandGroup>
+                            {customerSuggestions.map((customer) => (
+                              <CommandItem
+                                key={customer.customerPhone}
+                                onSelect={() => selectCustomer(customer)}
+                                className="flex flex-col items-start gap-1"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4" />
+                                  <span className="font-medium">{customer.customerName}</span>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                  <div className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3" />
+                                    {customer.customerPhone}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {new Date(customer.lastSaleDate).toLocaleDateString()}
+                                  </div>
+                                  <div>Rs. {Math.round(customer.totalSpent).toLocaleString()}</div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <Label>Phone</Label>
@@ -424,7 +558,6 @@ export default function POSSales() {
                     </span>
                   </div>
 
-                  {/* ✅ Show remaining balance */}
                   {paidAmount > 0 && (
                     <div className="flex justify-between text-sm text-gray-700">
                       <span>Remaining</span>
@@ -522,7 +655,7 @@ export default function POSSales() {
                             {color.variant.product.company}
                           </div>
                         </div>
-                        <StockQuantity stock={color.stock} />
+                        <StockQuantity stock={color.stockQuantity} />
                       </div>
 
                       <div className="mt-3 text-xs text-gray-600 flex flex-wrap gap-2 items-center">
@@ -545,7 +678,7 @@ export default function POSSales() {
                           Rs. {Math.round(parseFloat(color.variant.rate))}
                         </div>
                         <div className="text-xs text-gray-500">
-                          Stock: {color.stock}
+                          Stock: {color.stockQuantity}
                         </div>
                       </div>
                     </Card>
@@ -583,7 +716,7 @@ export default function POSSales() {
                   {selectedColor.variant.product.company}
                 </div>
                 <div className="mt-1">
-                  <StockQuantity stock={selectedColor.stock} />
+                  <StockQuantity stock={selectedColor.stockQuantity} />
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -603,6 +736,7 @@ export default function POSSales() {
                     value={confirmQty}
                     onChange={(e) => setConfirmQty(Number(e.target.value))}
                     className="w-16 text-center h-8"
+                    max={selectedColor.stockQuantity}
                   />
                   <Button
                     size="icon"
@@ -623,7 +757,14 @@ export default function POSSales() {
                   className="w-28 h-8 text-center"
                 />
               </div>
-              <Button className="w-full" onClick={confirmAdd}>
+              <div className="text-xs text-gray-500 text-center">
+                Available: {selectedColor.stockQuantity} units
+              </div>
+              <Button 
+                className="w-full" 
+                onClick={confirmAdd}
+                disabled={confirmQty > selectedColor.stockQuantity}
+              >
                 Add to Cart
               </Button>
             </div>
