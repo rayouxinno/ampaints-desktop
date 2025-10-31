@@ -1,3 +1,4 @@
+// unpaid-bills.tsx
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,10 +28,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CreditCard, Calendar, User, Phone, Plus, Trash2, Eye, Search, Banknote, Printer, Receipt } from "lucide-react";
+import { 
+  CreditCard, 
+  Calendar, 
+  User, 
+  Phone, 
+  Plus, 
+  Trash2, 
+  Eye, 
+  Search, 
+  Banknote, 
+  Printer, 
+  Receipt,
+  Filter,
+  Edit,
+  RotateCcw,
+  Download
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Sale, SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
+import type { Sale, SaleWithItems, ColorWithVariantAndProduct, SaleItem } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
 
@@ -42,9 +66,16 @@ export default function UnpaidBills() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
+  const [editBillDialogOpen, setEditBillDialogOpen] = useState(false);
+  const [returnItemDialogOpen, setReturnItemDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [amountFilter, setAmountFilter] = useState<string>("all");
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
   const [quantity, setQuantity] = useState("1");
+  const [itemToReturn, setItemToReturn] = useState<SaleItem | null>(null);
+  const [returnQuantity, setReturnQuantity] = useState("1");
   const { toast } = useToast();
 
   const { data: unpaidSales = [], isLoading } = useQuery<Sale[]>({
@@ -123,6 +154,44 @@ export default function UnpaidBills() {
     },
   });
 
+  const returnItemMutation = useMutation({
+    mutationFn: async (data: { saleItemId: string; quantity: number; reason: string }) => {
+      return await apiRequest("POST", `/api/sale-items/${data.saleItemId}/return`, {
+        quantity: data.quantity,
+        reason: data.reason,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales/unpaid"] });
+      if (selectedSaleId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/sales/${selectedSaleId}`] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/colors"] });
+      toast({ title: "Item returned successfully" });
+      setReturnItemDialogOpen(false);
+      setItemToReturn(null);
+      setReturnQuantity("1");
+    },
+    onError: () => {
+      toast({ title: "Failed to return item", variant: "destructive" });
+    },
+  });
+
+  const deleteSaleMutation = useMutation({
+    mutationFn: async (saleId: string) => {
+      return await apiRequest("DELETE", `/api/sales/${saleId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales/unpaid"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
+      toast({ title: "Bill deleted successfully" });
+      setSelectedSaleId(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to delete bill", variant: "destructive" });
+    },
+  });
+
   const handleRecordPayment = async () => {
     if (!selectedCustomer || !paymentAmount) {
       toast({ title: "Please enter payment amount", variant: "destructive" });
@@ -135,7 +204,6 @@ export default function UnpaidBills() {
       return;
     }
 
-    // Check if payment exceeds outstanding
     if (amount > selectedCustomer.totalOutstanding) {
       toast({ 
         title: `Payment amount (Rs. ${Math.round(amount).toLocaleString()}) exceeds outstanding balance (Rs. ${Math.round(selectedCustomer.totalOutstanding).toLocaleString()})`, 
@@ -144,7 +212,6 @@ export default function UnpaidBills() {
       return;
     }
 
-    // Sort bills by date (oldest first) and apply payment
     const sortedBills = [...selectedCustomer.bills].sort((a, b) => 
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
@@ -159,38 +226,20 @@ export default function UnpaidBills() {
       const billPaid = parseFloat(bill.amountPaid);
       const billOutstanding = billTotal - billPaid;
       
-      if (billOutstanding > 0) {
-        const paymentForThisBill = Math.min(remainingPayment, billOutstanding);
+      const paymentForThisBill = Math.min(remainingPayment, billOutstanding);
+      if (paymentForThisBill > 0) {
         paymentsToApply.push({ saleId: bill.id, amount: paymentForThisBill });
         remainingPayment -= paymentForThisBill;
       }
     }
 
-    // Validate that we have payments to apply
-    if (paymentsToApply.length === 0) {
-      toast({ title: "No outstanding balance to apply payment to", variant: "destructive" });
-      return;
-    }
-
-    // Apply all payments
-    try {
-      for (const payment of paymentsToApply) {
-        await apiRequest("POST", `/api/sales/${payment.saleId}/payment`, { amount: payment.amount });
-      }
-      
-      queryClient.invalidateQueries({ queryKey: ["/api/sales/unpaid"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard-stats"] });
-      toast({ title: `Payment of Rs. ${Math.round(amount).toLocaleString()} recorded successfully` });
-      setPaymentDialogOpen(false);
-      setPaymentAmount("");
-      setSelectedCustomerPhone(null);
-    } catch (error) {
-      toast({ title: "Failed to record payment", variant: "destructive" });
+    for (const payment of paymentsToApply) {
+      await recordPaymentMutation.mutateAsync(payment);
     }
   };
 
-  const handleAddProduct = () => {
-    if (!selectedColor || !selectedSaleId) {
+  const handleAddProduct = async () => {
+    if (!selectedSaleId || !selectedColor) {
       toast({ title: "Please select a product", variant: "destructive" });
       return;
     }
@@ -202,14 +251,18 @@ export default function UnpaidBills() {
     }
 
     if (qty > selectedColor.stockQuantity) {
-      toast({ title: "Not enough stock available", variant: "destructive" });
+      toast({ 
+        title: "Insufficient stock", 
+        description: `Only ${selectedColor.stockQuantity} units available`,
+        variant: "destructive" 
+      });
       return;
     }
 
     const rate = parseFloat(selectedColor.variant.rate);
-    const subtotal = rate * qty;
+    const subtotal = qty * rate;
 
-    addItemMutation.mutate({
+    await addItemMutation.mutateAsync({
       saleId: selectedSaleId,
       colorId: selectedColor.id,
       quantity: qty,
@@ -218,510 +271,698 @@ export default function UnpaidBills() {
     });
   };
 
-  const getPaymentStatusBadge = (status: string) => {
-    switch (status) {
-      case "paid":
-        return <Badge variant="default">Paid</Badge>;
-      case "partial":
-        return <Badge variant="secondary">Partial</Badge>;
-      case "unpaid":
-        return <Badge variant="outline">Unpaid</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  const handleReturnItem = async () => {
+    if (!itemToReturn || !returnQuantity) {
+      toast({ title: "Please select quantity to return", variant: "destructive" });
+      return;
     }
+
+    const qty = parseInt(returnQuantity);
+    if (qty <= 0) {
+      toast({ title: "Quantity must be positive", variant: "destructive" });
+      return;
+    }
+
+    if (qty > itemToReturn.quantity) {
+      toast({ 
+        title: "Cannot return more than purchased", 
+        description: `Only ${itemToReturn.quantity} units purchased`,
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    await returnItemMutation.mutateAsync({
+      saleItemId: itemToReturn.id,
+      quantity: qty,
+      reason: "Customer return",
+    });
   };
-
-  const getDaysOverdue = (createdAt: string | Date) => {
-    const created = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - created.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const filteredColors = useMemo(() => {
-    if (!searchQuery) return colors;
-
-    const query = searchQuery.toLowerCase();
-    
-    return colors
-      .map((color) => {
-        let score = 0;
-        
-        // Exact color code match (highest priority)
-        if (color.colorCode.toLowerCase() === query) {
-          score += 1000;
-        } else if (color.colorCode.toLowerCase().startsWith(query)) {
-          score += 500;
-        } else if (color.colorCode.toLowerCase().includes(query)) {
-          score += 100;
-        }
-        
-        // Color name matching
-        if (color.colorName.toLowerCase() === query) {
-          score += 200;
-        } else if (color.colorName.toLowerCase().includes(query)) {
-          score += 50;
-        }
-        
-        // Company and product matching
-        if (color.variant.product.company.toLowerCase().includes(query)) {
-          score += 30;
-        }
-        if (color.variant.product.productName.toLowerCase().includes(query)) {
-          score += 30;
-        }
-        
-        // Packing size matching
-        if (color.variant.packingSize.toLowerCase().includes(query)) {
-          score += 20;
-        }
-        
-        return { color, score };
-      })
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(({ color }) => color);
-  }, [colors, searchQuery]);
-
-  const currentSale = unpaidSales.find(s => s.id === selectedSaleId);
 
   const consolidatedCustomers = useMemo(() => {
     const customerMap = new Map<string, ConsolidatedCustomer>();
     
     unpaidSales.forEach(sale => {
-      const phone = sale.customerPhone;
-      const existing = customerMap.get(phone);
-      
-      const totalAmount = parseFloat(sale.totalAmount);
-      const totalPaid = parseFloat(sale.amountPaid);
-      const outstanding = totalAmount - totalPaid;
-      const billDate = new Date(sale.createdAt);
+      const existing = customerMap.get(sale.customerPhone);
+      const saleTotal = parseFloat(sale.totalAmount);
+      const salePaid = parseFloat(sale.amountPaid);
+      const saleOutstanding = saleTotal - salePaid;
       
       if (existing) {
         existing.bills.push(sale);
-        existing.totalAmount += totalAmount;
-        existing.totalPaid += totalPaid;
-        existing.totalOutstanding += outstanding;
-        if (billDate < existing.oldestBillDate) {
-          existing.oldestBillDate = billDate;
+        existing.totalAmount += saleTotal;
+        existing.totalPaid += salePaid;
+        existing.totalOutstanding += saleOutstanding;
+        if (new Date(sale.createdAt) < existing.oldestBillDate) {
+          existing.oldestBillDate = new Date(sale.createdAt);
         }
       } else {
-        customerMap.set(phone, {
-          customerPhone: phone,
+        customerMap.set(sale.customerPhone, {
+          customerPhone: sale.customerPhone,
           customerName: sale.customerName,
           bills: [sale],
-          totalAmount,
-          totalPaid,
-          totalOutstanding: outstanding,
-          oldestBillDate: billDate,
+          totalAmount: saleTotal,
+          totalPaid: salePaid,
+          totalOutstanding: saleOutstanding,
+          oldestBillDate: new Date(sale.createdAt),
         });
       }
     });
-    
-    return Array.from(customerMap.values()).sort((a, b) => {
-      return a.oldestBillDate.getTime() - b.oldestBillDate.getTime();
-    });
+
+    return Array.from(customerMap.values());
   }, [unpaidSales]);
 
-  const [selectedCustomerPhone, setSelectedCustomerPhone] = useState<string | null>(null);
-  const selectedCustomer = consolidatedCustomers.find(c => c.customerPhone === selectedCustomerPhone);
+  const filteredCustomers = useMemo(() => {
+    return consolidatedCustomers.filter(customer => {
+      // Search filter
+      const matchesSearch = 
+        customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        customer.customerPhone.includes(searchQuery);
+      
+      // Status filter
+      let matchesStatus = true;
+      if (statusFilter === "overdue") {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        matchesStatus = customer.oldestBillDate < thirtyDaysAgo;
+      } else if (statusFilter === "recent") {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        matchesStatus = customer.oldestBillDate >= sevenDaysAgo;
+      }
+
+      // Date filter
+      let matchesDate = true;
+      if (dateFilter === "week") {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        matchesDate = customer.oldestBillDate >= weekAgo;
+      } else if (dateFilter === "month") {
+        const monthAgo = new Date();
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        matchesDate = customer.oldestBillDate >= monthAgo;
+      }
+
+      // Amount filter
+      let matchesAmount = true;
+      if (amountFilter === "small") {
+        matchesAmount = customer.totalOutstanding <= 1000;
+      } else if (amountFilter === "medium") {
+        matchesAmount = customer.totalOutstanding > 1000 && customer.totalOutstanding <= 5000;
+      } else if (amountFilter === "large") {
+        matchesAmount = customer.totalOutstanding > 5000;
+      }
+
+      return matchesSearch && matchesStatus && matchesDate && matchesAmount;
+    });
+  }, [consolidatedCustomers, searchQuery, statusFilter, dateFilter, amountFilter]);
+
+  const selectedCustomer = useMemo(() => {
+    if (!selectedSaleId) return null;
+    return consolidatedCustomers.find(c => 
+      c.bills.some(b => b.id === selectedSaleId)
+    );
+  }, [consolidatedCustomers, selectedSaleId]);
+
+  const filteredColors = useMemo(() => {
+    if (!searchQuery) return colors;
+    const q = searchQuery.toLowerCase().trim();
+    return colors.filter(
+      (c) =>
+        c.colorCode.toLowerCase().includes(q) ||
+        c.colorName.toLowerCase().includes(q) ||
+        c.variant.product.productName.toLowerCase().includes(q) ||
+        c.variant.product.company.toLowerCase().includes(q)
+    );
+  }, [colors, searchQuery]);
+
+  const PaymentStatusBadge = ({ sale }: { sale: Sale }) => {
+    const total = parseFloat(sale.totalAmount);
+    const paid = parseFloat(sale.amountPaid);
+    const outstanding = total - paid;
+
+    if (outstanding === 0) {
+      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Paid</Badge>;
+    } else if (paid === 0) {
+      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Unpaid</Badge>;
+    } else {
+      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Partial</Badge>;
+    }
+  };
+
+  const StockQuantity = ({ stock }: { stock: number }) => {
+    if (stock <= 0) {
+      return (
+        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs">
+          Out of Stock
+        </Badge>
+      );
+    } else if (stock <= 10) {
+      return (
+        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs">
+          Low: {stock}
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+          {stock}
+        </Badge>
+      );
+    }
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-unpaid-bills-title">
-          Unpaid Bills
-        </h1>
-        <p className="text-sm text-muted-foreground">Track and manage outstanding payments</p>
-      </div>
-
-      {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}>
-              <CardContent className="p-6">
-                <Skeleton className="h-20 w-full" />
-              </CardContent>
-            </Card>
-          ))}
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Unpaid Bills</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Manage customer outstanding payments and bill modifications
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2">
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            <Button variant="outline" className="gap-2">
+              <Printer className="h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
         </div>
-      ) : consolidatedCustomers.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <CreditCard className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium mb-1">No unpaid bills</h3>
-            <p className="text-sm text-muted-foreground">All payments are up to date</p>
+
+        {/* Filters */}
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  placeholder="Search customer..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <Filter className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="overdue">Overdue (30+ days)</SelectItem>
+                  <SelectItem value="recent">Recent (7 days)</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger>
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Dates</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">Last 30 Days</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={amountFilter} onValueChange={setAmountFilter}>
+                <SelectTrigger>
+                  <Banknote className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Amount" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Amounts</SelectItem>
+                  <SelectItem value="small">Small (&lt; 1K)</SelectItem>
+                  <SelectItem value="medium">Medium (1K-5K)</SelectItem>
+                  <SelectItem value="large">Large (&gt; 5K)</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div className="text-sm text-gray-500 flex items-center justify-end">
+                {filteredCustomers.length} customers found
+              </div>
+            </div>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {consolidatedCustomers.map((customer) => {
-            const daysOverdue = getDaysOverdue(customer.oldestBillDate);
 
-            return (
-              <Card key={customer.customerPhone} className="hover-elevate" data-testid={`unpaid-bill-customer-${customer.customerPhone}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-base">{customer.customerName}</CardTitle>
-                    {customer.bills.length > 1 && (
-                      <Badge variant="secondary">{customer.bills.length} Bills</Badge>
-                    )}
+        {/* Customer List */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Customer Cards */}
+          <div className="lg:col-span-2 space-y-4">
+            {isLoading ? (
+              [...Array(5)].map((_, i) => (
+                <Card key={i} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-8 w-20" />
+                  </div>
+                </Card>
+              ))
+            ) : filteredCustomers.length === 0 ? (
+              <Card className="p-8 text-center">
+                <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No unpaid bills found</h3>
+                <p className="text-gray-500">All customer bills are paid up to date.</p>
+              </Card>
+            ) : (
+              filteredCustomers.map((customer) => (
+                <Card key={customer.customerPhone} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-gray-500" />
+                            <h3 className="font-semibold text-gray-900">{customer.customerName}</h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm text-gray-600">{customer.customerPhone}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-3">
+                          <div>
+                            <div className="font-medium">Total Bills</div>
+                            <div>{customer.bills.length}</div>
+                          </div>
+                          <div>
+                            <div className="font-medium">Total Amount</div>
+                            <div>Rs. {Math.round(customer.totalAmount).toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="font-medium">Outstanding</div>
+                            <div className="font-bold text-red-600">
+                              Rs. {Math.round(customer.totalOutstanding).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {customer.bills.map((bill) => (
+                            <Badge
+                              key={bill.id}
+                              variant="outline"
+                              className={`cursor-pointer hover:bg-gray-50 ${
+                                selectedSaleId === bill.id ? "bg-blue-50 border-blue-200" : ""
+                              }`}
+                              onClick={() => setSelectedSaleId(bill.id)}
+                            >
+                              Bill #{bill.id.slice(-6)}
+                              <PaymentStatusBadge sale={bill} />
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 ml-4">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedSaleId(customer.bills[0].id);
+                            setPaymentDialogOpen(true);
+                          }}
+                          className="gap-2"
+                        >
+                          <Banknote className="h-4 w-4" />
+                          Pay
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelectedSaleId(customer.bills[0].id)}
+                          className="gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+
+          {/* Bill Details */}
+          <div className="space-y-6">
+            {selectedSaleId && saleDetails ? (
+              <Card className="sticky top-6">
+                <CardHeader className="bg-gray-50 border-b">
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-lg">Bill Details</CardTitle>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditBillDialogOpen(true)}
+                        className="gap-2"
+                      >
+                        <Edit className="h-4 w-4" />
+                        Edit
+                      </Button>
+                      <Link href={`/bill/${selectedSaleId}`}>
+                        <Button size="sm" variant="outline" className="gap-2">
+                          <Receipt className="h-4 w-4" />
+                          Print
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Phone className="h-4 w-4" />
-                      <span>{customer.customerPhone}</span>
+                <CardContent className="p-0">
+                  <div className="p-4 border-b">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="font-semibold">{saleDetails.customerName}</div>
+                        <div className="text-sm text-gray-500">{saleDetails.customerPhone}</div>
+                      </div>
+                      <PaymentStatusBadge sale={saleDetails} />
                     </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      <span>{customer.oldestBillDate.toLocaleDateString()}</span>
-                      <Badge variant="secondary" className="ml-auto">
-                        {daysOverdue} days ago
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-border space-y-1 font-mono text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Total:</span>
-                      <span>Rs. {Math.round(customer.totalAmount).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Paid:</span>
-                      <span>Rs. {Math.round(customer.totalPaid).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between font-semibold text-base text-destructive">
-                      <span>Outstanding:</span>
-                      <span data-testid={`text-outstanding-${customer.customerPhone}`}>
-                        Rs. {Math.round(customer.totalOutstanding).toLocaleString()}
-                      </span>
+                    <div className="text-sm text-gray-600">
+                      Bill Date: {new Date(saleDetails.createdAt).toLocaleDateString()}
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      className="w-full"
-                      variant="outline"
-                      onClick={() => setSelectedCustomerPhone(customer.customerPhone)}
-                      data-testid={`button-view-details-${customer.customerPhone}`}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Button>
-                    <Button
-                      className="w-full"
-                      variant="default"
-                      onClick={() => {
-                        setSelectedCustomerPhone(customer.customerPhone);
-                        setPaymentDialogOpen(true);
-                        setPaymentAmount(Math.round(customer.totalOutstanding).toString());
-                      }}
-                      data-testid={`button-record-payment-${customer.customerPhone}`}
-                    >
-                      <Banknote className="h-4 w-4 mr-2" />
-                      Payment
-                    </Button>
+                  <div className="max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product</TableHead>
+                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead className="text-right">Rate</TableHead>
+                          <TableHead className="text-right">Total</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {saleDetails.items.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              <div className="text-sm font-medium">
+                                {item.color.variant.product.productName}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {item.color.colorName} ({item.color.colorCode})
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell className="text-right">Rs. {Math.round(item.rate)}</TableCell>
+                            <TableCell className="text-right">Rs. {Math.round(item.subtotal)}</TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-red-500"
+                                  onClick={() => deleteItemMutation.mutate(item.id)}
+                                  disabled={deleteItemMutation.isLoading}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-blue-500"
+                                  onClick={() => {
+                                    setItemToReturn(item);
+                                    setReturnQuantity("1");
+                                    setReturnItemDialogOpen(true);
+                                  }}
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="p-4 border-t bg-gray-50">
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>Rs. {Math.round(parseFloat(saleDetails.totalAmount))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Paid:</span>
+                        <span>Rs. {Math.round(parseFloat(saleDetails.amountPaid))}</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Outstanding:</span>
+                        <span className="text-red-600">
+                          Rs. {Math.round(parseFloat(saleDetails.totalAmount) - parseFloat(saleDetails.amountPaid))}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        className="flex-1"
+                        onClick={() => {
+                          setPaymentAmount(
+                            (parseFloat(saleDetails.totalAmount) - parseFloat(saleDetails.amountPaid)).toString()
+                          );
+                          setPaymentDialogOpen(true);
+                        }}
+                      >
+                        Record Payment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => deleteSaleMutation.mutate(selectedSaleId)}
+                        disabled={deleteSaleMutation.isLoading}
+                      >
+                        Delete Bill
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-            );
-          })}
+            ) : (
+              <Card className="p-8 text-center">
+                <Receipt className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No bill selected</h3>
+                <p className="text-gray-500">Select a bill from the list to view details</p>
+              </Card>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* Customer Bills Details Dialog */}
-      <Dialog open={!!selectedCustomerPhone && !paymentDialogOpen} onOpenChange={(open) => !open && setSelectedCustomerPhone(null)}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Customer Bills</DialogTitle>
-            <DialogDescription>
-              All unpaid bills for {selectedCustomer?.customerName}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              {/* Customer Info */}
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-md text-sm">
-                <div>
-                  <p className="text-muted-foreground">Customer</p>
-                  <p className="font-medium">{selectedCustomer.customerName}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Phone</p>
-                  <p className="font-medium">{selectedCustomer.customerPhone}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Total Bills</p>
-                  <p className="font-medium">{selectedCustomer.bills.length}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Oldest Bill</p>
-                  <p className="font-medium">{selectedCustomer.oldestBillDate.toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              {/* Bills List */}
-              <div className="space-y-3">
-                <h3 className="font-medium">Bills</h3>
-                {selectedCustomer.bills.map((bill) => {
-                  const billTotal = parseFloat(bill.totalAmount);
-                  const billPaid = parseFloat(bill.amountPaid);
-                  const billOutstanding = Math.round(billTotal - billPaid);
-                  
-                  return (
-                    <Card key={bill.id} data-testid={`bill-card-${bill.id}`}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex-1 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Receipt className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm font-medium">
-                                {new Date(bill.createdAt).toLocaleDateString()} - {new Date(bill.createdAt).toLocaleTimeString()}
-                              </span>
-                              {getPaymentStatusBadge(bill.paymentStatus)}
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs font-mono">
-                              <div>
-                                <span className="text-muted-foreground">Total: </span>
-                                <span>Rs. {Math.round(billTotal).toLocaleString()}</span>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">Paid: </span>
-                                <span>Rs. {Math.round(billPaid).toLocaleString()}</span>
-                              </div>
-                              {billOutstanding > 0 && (
-                                <div>
-                                  <span className="text-muted-foreground">Due: </span>
-                                  <span className="text-destructive font-semibold">Rs. {billOutstanding.toLocaleString()}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Link href={`/bill/${bill.id}`}>
-                              <Button variant="outline" size="sm" data-testid={`button-view-bill-${bill.id}`}>
-                                <Printer className="h-4 w-4 mr-1" />
-                                Print
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              {/* Consolidated Totals */}
-              <div className="p-4 bg-muted rounded-md space-y-2 text-sm font-mono">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Amount:</span>
-                  <span>Rs. {Math.round(selectedCustomer.totalAmount).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Amount Paid:</span>
-                  <span>Rs. {Math.round(selectedCustomer.totalPaid).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between font-semibold text-base text-destructive border-t border-border pt-2">
-                  <span>Total Outstanding:</span>
-                  <span>Rs. {Math.round(selectedCustomer.totalOutstanding).toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setSelectedCustomerPhone(null)}>
-                  Close
-                </Button>
-                <Button
-                  onClick={() => {
-                    setPaymentDialogOpen(true);
-                    setPaymentAmount(Math.round(selectedCustomer.totalOutstanding).toString());
-                  }}
-                  data-testid="button-record-payment-dialog"
-                >
-                  <Banknote className="h-4 w-4 mr-2" />
-                  Record Payment
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Record Payment Dialog */}
+      {/* Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
-              Update payment for {selectedCustomer?.customerName}
+              Record payment for {selectedCustomer?.customerName}
             </DialogDescription>
           </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-md space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Bills:</span>
-                  <span className="font-mono">Rs. {Math.round(selectedCustomer.totalAmount).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Already Paid:</span>
-                  <span className="font-mono">Rs. {Math.round(selectedCustomer.totalPaid).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total Outstanding:</span>
-                  <span className="font-mono">
-                    Rs. {Math.round(selectedCustomer.totalOutstanding).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="paymentAmount">Payment Amount</Label>
-                <Input
-                  id="paymentAmount"
-                  type="number"
-                  step="1"
-                  placeholder="0"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  data-testid="input-payment-amount"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Payment will be applied to oldest bills first
-                </p>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleRecordPayment}
-                  disabled={recordPaymentMutation.isPending}
-                  data-testid="button-submit-payment"
-                >
-                  {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
-                </Button>
-              </div>
+          <div className="space-y-4">
+            <div>
+              <Label>Payment Amount</Label>
+              <Input
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="Enter amount"
+              />
             </div>
-          )}
+            {selectedCustomer && (
+              <div className="text-sm text-gray-600">
+                Outstanding Balance: Rs. {Math.round(selectedCustomer.totalOutstanding).toLocaleString()}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={handleRecordPayment}
+                disabled={recordPaymentMutation.isLoading}
+              >
+                Record Payment
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setPaymentDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Add Product Dialog */}
       <Dialog open={addProductDialogOpen} onOpenChange={setAddProductDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add Product to Bill</DialogTitle>
             <DialogDescription>
-              Search and select a product to add to the bill
+              Search and add products to the current bill
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div>
+              <Label>Search Products</Label>
               <Input
-                placeholder="Search by color code, name, company, or product..."
+                placeholder="Search by code, name, product..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                data-testid="input-search-colors"
-                className="pl-9"
               />
             </div>
 
-            {/* Color Selection */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {filteredColors.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  {searchQuery ? "No colors found matching your search" : "Start typing to search for colors"}
-                </p>
-              ) : (
-                filteredColors.slice(0, 20).map((color) => (
-                  <Card
-                    key={color.id}
-                    className={`hover-elevate cursor-pointer ${selectedColor?.id === color.id ? "border-primary" : ""}`}
-                    onClick={() => setSelectedColor(color)}
-                    data-testid={`color-option-${color.id}`}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{color.variant.product.company}</Badge>
-                            <span className="font-medium">{color.variant.product.productName}</span>
-                            <Badge variant="outline">{color.variant.packingSize}</Badge>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground">{color.colorName}</span>
-                            <Badge variant="secondary">{color.colorCode}</Badge>
-                            <Badge variant={color.stockQuantity > 0 ? "default" : "destructive"}>
-                              Stock: {color.stockQuantity}
-                            </Badge>
-                          </div>
+            <div className="max-h-60 overflow-y-auto border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredColors.map((color) => (
+                    <TableRow key={color.id}>
+                      <TableCell>
+                        <div className="font-medium">
+                          {color.variant.product.productName}
                         </div>
-                        <div className="text-right">
-                          <p className="font-mono font-medium">Rs. {Math.round(parseFloat(color.variant.rate))}</p>
+                        <div className="text-xs text-gray-500">
+                          {color.colorName}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{color.colorCode}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <StockQuantity stock={color.stockQuantity} />
+                      </TableCell>
+                      <TableCell>Rs. {Math.round(parseFloat(color.variant.rate))}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          onClick={() => setSelectedColor(color)}
+                          disabled={color.stockQuantity <= 0}
+                        >
+                          Select
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
 
-            {/* Quantity */}
             {selectedColor && (
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  max={selectedColor.stockQuantity}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  data-testid="input-quantity"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Available stock: {selectedColor.stockQuantity} units
-                </p>
-                {selectedColor && (
-                  <div className="p-3 bg-muted rounded-md">
-                    <div className="flex justify-between font-mono">
-                      <span>Subtotal:</span>
-                      <span>Rs. {Math.round(parseFloat(selectedColor.variant.rate) * parseInt(quantity || "0"))}</span>
+              <div className="space-y-3 p-4 border rounded-md bg-gray-50">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="font-medium">{selectedColor.variant.product.productName}</div>
+                    <div className="text-sm text-gray-500">
+                      {selectedColor.colorName} ({selectedColor.colorCode})
                     </div>
                   </div>
-                )}
+                  <div className="text-right">
+                    <div className="font-bold">Rs. {Math.round(parseFloat(selectedColor.variant.rate))}</div>
+                    <div className="text-sm text-gray-500">
+                      Stock: {selectedColor.stockQuantity}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Label>Quantity</Label>
+                    <Input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      min="1"
+                      max={selectedColor.stockQuantity}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAddProduct}
+                    disabled={addItemMutation.isLoading}
+                    className="mt-6"
+                  >
+                    Add to Bill
+                  </Button>
+                </div>
               </div>
             )}
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setAddProductDialogOpen(false);
-                  setSelectedColor(null);
-                  setQuantity("1");
-                  setSearchQuery("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAddProduct}
-                disabled={!selectedColor || addItemMutation.isPending}
-                data-testid="button-confirm-add-product"
-              >
-                {addItemMutation.isPending ? "Adding..." : "Add Product"}
-              </Button>
-            </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return Item Dialog */}
+      <Dialog open={returnItemDialogOpen} onOpenChange={setReturnItemDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Return Item</DialogTitle>
+            <DialogDescription>
+              Process return for selected item
+            </DialogDescription>
+          </DialogHeader>
+          {itemToReturn && (
+            <div className="space-y-4">
+              <div>
+                <div className="font-medium">{itemToReturn.color.variant.product.productName}</div>
+                <div className="text-sm text-gray-500">
+                  {itemToReturn.color.colorName} ({itemToReturn.color.colorCode})
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <div className="text-gray-500">Purchased Qty</div>
+                  <div className="font-medium">{itemToReturn.quantity}</div>
+                </div>
+                <div>
+                  <div className="text-gray-500">Rate</div>
+                  <div className="font-medium">Rs. {Math.round(itemToReturn.rate)}</div>
+                </div>
+              </div>
+              <div>
+                <Label>Quantity to Return</Label>
+                <Input
+                  type="number"
+                  value={returnQuantity}
+                  onChange={(e) => setReturnQuantity(e.target.value)}
+                  min="1"
+                  max={itemToReturn.quantity}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  onClick={handleReturnItem}
+                  disabled={returnItemMutation.isLoading}
+                >
+                  Process Return
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setReturnItemDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
