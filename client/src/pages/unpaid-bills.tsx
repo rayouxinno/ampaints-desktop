@@ -78,6 +78,7 @@ export default function UnpaidBills() {
   const [returnQuantity, setReturnQuantity] = useState("1");
   const { toast } = useToast();
 
+  // Safe queries with default empty arrays
   const { data: unpaidSales = [], isLoading } = useQuery<Sale[]>({
     queryKey: ["/api/sales/unpaid"],
   });
@@ -302,10 +303,10 @@ export default function UnpaidBills() {
   const consolidatedCustomers = useMemo(() => {
     const customerMap = new Map<string, ConsolidatedCustomer>();
     
-    unpaidSales.forEach(sale => {
+    (unpaidSales || []).forEach(sale => {
       const existing = customerMap.get(sale.customerPhone);
-      const saleTotal = parseFloat(sale.totalAmount);
-      const salePaid = parseFloat(sale.amountPaid);
+      const saleTotal = parseFloat(sale.totalAmount || "0");
+      const salePaid = parseFloat(sale.amountPaid || "0");
       const saleOutstanding = saleTotal - salePaid;
       
       if (existing) {
@@ -318,8 +319,8 @@ export default function UnpaidBills() {
         }
       } else {
         customerMap.set(sale.customerPhone, {
-          customerPhone: sale.customerPhone,
-          customerName: sale.customerName,
+          customerPhone: sale.customerPhone || "",
+          customerName: sale.customerName || "Unknown Customer",
           bills: [sale],
           totalAmount: saleTotal,
           totalPaid: salePaid,
@@ -333,11 +334,13 @@ export default function UnpaidBills() {
   }, [unpaidSales]);
 
   const filteredCustomers = useMemo(() => {
-    return consolidatedCustomers.filter(customer => {
+    return (consolidatedCustomers || []).filter(customer => {
+      if (!customer) return false;
+      
       // Search filter
       const matchesSearch = 
-        customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.customerPhone.includes(searchQuery);
+        (customer.customerName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (customer.customerPhone || "").includes(searchQuery);
       
       // Status filter
       let matchesStatus = true;
@@ -379,26 +382,26 @@ export default function UnpaidBills() {
 
   const selectedCustomer = useMemo(() => {
     if (!selectedSaleId) return null;
-    return consolidatedCustomers.find(c => 
-      c.bills.some(b => b.id === selectedSaleId)
+    return (consolidatedCustomers || []).find(c => 
+      c && c.bills && c.bills.some(b => b.id === selectedSaleId)
     );
   }, [consolidatedCustomers, selectedSaleId]);
 
   const filteredColors = useMemo(() => {
-    if (!searchQuery) return colors;
+    if (!searchQuery) return colors || [];
     const q = searchQuery.toLowerCase().trim();
-    return colors.filter(
+    return (colors || []).filter(
       (c) =>
-        c.colorCode.toLowerCase().includes(q) ||
-        c.colorName.toLowerCase().includes(q) ||
-        c.variant.product.productName.toLowerCase().includes(q) ||
-        c.variant.product.company.toLowerCase().includes(q)
+        c?.colorCode?.toLowerCase().includes(q) ||
+        c?.colorName?.toLowerCase().includes(q) ||
+        c?.variant?.product?.productName?.toLowerCase().includes(q) ||
+        c?.variant?.product?.company?.toLowerCase().includes(q)
     );
   }, [colors, searchQuery]);
 
   const PaymentStatusBadge = ({ sale }: { sale: Sale }) => {
-    const total = parseFloat(sale.totalAmount);
-    const paid = parseFloat(sale.amountPaid);
+    const total = parseFloat(sale.totalAmount || "0");
+    const paid = parseFloat(sale.amountPaid || "0");
     const outstanding = total - paid;
 
     if (outstanding === 0) {
@@ -506,7 +509,7 @@ export default function UnpaidBills() {
               </Select>
 
               <div className="text-sm text-gray-500 flex items-center justify-end">
-                {filteredCustomers.length} customers found
+                {(filteredCustomers || []).length} customers found
               </div>
             </div>
           </CardContent>
@@ -528,88 +531,100 @@ export default function UnpaidBills() {
                   </div>
                 </Card>
               ))
-            ) : filteredCustomers.length === 0 ? (
+            ) : (filteredCustomers || []).length === 0 ? (
               <Card className="p-8 text-center">
                 <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">No unpaid bills found</h3>
                 <p className="text-gray-500">All customer bills are paid up to date.</p>
               </Card>
             ) : (
-              filteredCustomers.map((customer) => (
-                <Card key={customer.customerPhone} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-gray-500" />
-                            <h3 className="font-semibold text-gray-900">{customer.customerName}</h3>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4 text-gray-500" />
-                            <span className="text-sm text-gray-600">{customer.customerPhone}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-3">
-                          <div>
-                            <div className="font-medium">Total Bills</div>
-                            <div>{customer.bills.length}</div>
-                          </div>
-                          <div>
-                            <div className="font-medium">Total Amount</div>
-                            <div>Rs. {Math.round(customer.totalAmount).toLocaleString()}</div>
-                          </div>
-                          <div>
-                            <div className="font-medium">Outstanding</div>
-                            <div className="font-bold text-red-600">
-                              Rs. {Math.round(customer.totalOutstanding).toLocaleString()}
+              (filteredCustomers || []).map((customer) => (
+                customer && (
+                  <Card key={customer.customerPhone} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-gray-500" />
+                              <h3 className="font-semibold text-gray-900">{customer.customerName || "Unknown Customer"}</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Phone className="h-4 w-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">{customer.customerPhone || "No Phone"}</span>
                             </div>
                           </div>
+                          
+                          <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-3">
+                            <div>
+                              <div className="font-medium">Total Bills</div>
+                              <div>{(customer.bills || []).length}</div>
+                            </div>
+                            <div>
+                              <div className="font-medium">Total Amount</div>
+                              <div>Rs. {Math.round(customer.totalAmount || 0).toLocaleString()}</div>
+                            </div>
+                            <div>
+                              <div className="font-medium">Outstanding</div>
+                              <div className="font-bold text-red-600">
+                                Rs. {Math.round(customer.totalOutstanding || 0).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {(customer.bills || []).map((bill) => (
+                              bill && (
+                                <Badge
+                                  key={bill.id}
+                                  variant="outline"
+                                  className={`cursor-pointer hover:bg-gray-50 ${
+                                    selectedSaleId === bill.id ? "bg-blue-50 border-blue-200" : ""
+                                  }`}
+                                  onClick={() => setSelectedSaleId(bill.id)}
+                                >
+                                  Bill #{bill.id?.slice(-6) || "N/A"}
+                                  <PaymentStatusBadge sale={bill} />
+                                </Badge>
+                              )
+                            ))}
+                          </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
-                          {customer.bills.map((bill) => (
-                            <Badge
-                              key={bill.id}
-                              variant="outline"
-                              className={`cursor-pointer hover:bg-gray-50 ${
-                                selectedSaleId === bill.id ? "bg-blue-50 border-blue-200" : ""
-                              }`}
-                              onClick={() => setSelectedSaleId(bill.id)}
-                            >
-                              Bill #{bill.id.slice(-6)}
-                              <PaymentStatusBadge sale={bill} />
-                            </Badge>
-                          ))}
+                        <div className="flex flex-col gap-2 ml-4">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (customer.bills && customer.bills.length > 0) {
+                                setSelectedSaleId(customer.bills[0].id);
+                                setPaymentDialogOpen(true);
+                              }
+                            }}
+                            className="gap-2"
+                            disabled={!customer.bills || customer.bills.length === 0}
+                          >
+                            <Banknote className="h-4 w-4" />
+                            Pay
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (customer.bills && customer.bills.length > 0) {
+                                setSelectedSaleId(customer.bills[0].id);
+                              }
+                            }}
+                            className="gap-2"
+                            disabled={!customer.bills || customer.bills.length === 0}
+                          >
+                            <Eye className="h-4 w-4" />
+                            View
+                          </Button>
                         </div>
                       </div>
-
-                      <div className="flex flex-col gap-2 ml-4">
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setSelectedSaleId(customer.bills[0].id);
-                            setPaymentDialogOpen(true);
-                          }}
-                          className="gap-2"
-                        >
-                          <Banknote className="h-4 w-4" />
-                          Pay
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedSaleId(customer.bills[0].id)}
-                          className="gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )
               ))
             )}
           </div>
@@ -644,13 +659,13 @@ export default function UnpaidBills() {
                   <div className="p-4 border-b">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-semibold">{saleDetails.customerName}</div>
-                        <div className="text-sm text-gray-500">{saleDetails.customerPhone}</div>
+                        <div className="font-semibold">{saleDetails.customerName || "Unknown Customer"}</div>
+                        <div className="text-sm text-gray-500">{saleDetails.customerPhone || "No Phone"}</div>
                       </div>
                       <PaymentStatusBadge sale={saleDetails} />
                     </div>
                     <div className="text-sm text-gray-600">
-                      Bill Date: {new Date(saleDetails.createdAt).toLocaleDateString()}
+                      Bill Date: {saleDetails.createdAt ? new Date(saleDetails.createdAt).toLocaleDateString() : "Unknown Date"}
                     </div>
                   </div>
 
@@ -666,45 +681,47 @@ export default function UnpaidBills() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {saleDetails.items.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell>
-                              <div className="text-sm font-medium">
-                                {item.color.variant.product.productName}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {item.color.colorName} ({item.color.colorCode})
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell className="text-right">Rs. {Math.round(item.rate)}</TableCell>
-                            <TableCell className="text-right">Rs. {Math.round(item.subtotal)}</TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 text-red-500"
-                                  onClick={() => deleteItemMutation.mutate(item.id)}
-                                  disabled={deleteItemMutation.isLoading}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 text-blue-500"
-                                  onClick={() => {
-                                    setItemToReturn(item);
-                                    setReturnQuantity("1");
-                                    setReturnItemDialogOpen(true);
-                                  }}
-                                >
-                                  <RotateCcw className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
+                        {(saleDetails.items || []).map((item) => (
+                          item && (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <div className="text-sm font-medium">
+                                  {item.color?.variant?.product?.productName || "Unknown Product"}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {item.color?.colorName || "Unknown Color"} ({item.color?.colorCode || "N/A"})
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">{item.quantity || 0}</TableCell>
+                              <TableCell className="text-right">Rs. {Math.round(parseFloat(item.rate || "0"))}</TableCell>
+                              <TableCell className="text-right">Rs. {Math.round(parseFloat(item.subtotal || "0"))}</TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-red-500"
+                                    onClick={() => deleteItemMutation.mutate(item.id)}
+                                    disabled={deleteItemMutation.isLoading}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-blue-500"
+                                    onClick={() => {
+                                      setItemToReturn(item);
+                                      setReturnQuantity("1");
+                                      setReturnItemDialogOpen(true);
+                                    }}
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
                         ))}
                       </TableBody>
                     </Table>
@@ -714,16 +731,16 @@ export default function UnpaidBills() {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span>Subtotal:</span>
-                        <span>Rs. {Math.round(parseFloat(saleDetails.totalAmount))}</span>
+                        <span>Rs. {Math.round(parseFloat(saleDetails.totalAmount || "0"))}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Paid:</span>
-                        <span>Rs. {Math.round(parseFloat(saleDetails.amountPaid))}</span>
+                        <span>Rs. {Math.round(parseFloat(saleDetails.amountPaid || "0"))}</span>
                       </div>
                       <div className="flex justify-between font-bold">
                         <span>Outstanding:</span>
                         <span className="text-red-600">
-                          Rs. {Math.round(parseFloat(saleDetails.totalAmount) - parseFloat(saleDetails.amountPaid))}
+                          Rs. {Math.round(parseFloat(saleDetails.totalAmount || "0") - parseFloat(saleDetails.amountPaid || "0"))}
                         </span>
                       </div>
                     </div>
@@ -733,7 +750,7 @@ export default function UnpaidBills() {
                         className="flex-1"
                         onClick={() => {
                           setPaymentAmount(
-                            (parseFloat(saleDetails.totalAmount) - parseFloat(saleDetails.amountPaid)).toString()
+                            (parseFloat(saleDetails.totalAmount || "0") - parseFloat(saleDetails.amountPaid || "0")).toString()
                           );
                           setPaymentDialogOpen(true);
                         }}
@@ -768,7 +785,7 @@ export default function UnpaidBills() {
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
-              Record payment for {selectedCustomer?.customerName}
+              Record payment for {selectedCustomer?.customerName || "selected customer"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -783,7 +800,7 @@ export default function UnpaidBills() {
             </div>
             {selectedCustomer && (
               <div className="text-sm text-gray-600">
-                Outstanding Balance: Rs. {Math.round(selectedCustomer.totalOutstanding).toLocaleString()}
+                Outstanding Balance: Rs. {Math.round(selectedCustomer.totalOutstanding || 0).toLocaleString()}
               </div>
             )}
             <div className="flex gap-2">
@@ -836,33 +853,35 @@ export default function UnpaidBills() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredColors.map((color) => (
-                    <TableRow key={color.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {color.variant.product.productName}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {color.colorName}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{color.colorCode}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <StockQuantity stock={color.stockQuantity} />
-                      </TableCell>
-                      <TableCell>Rs. {Math.round(parseFloat(color.variant.rate))}</TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          onClick={() => setSelectedColor(color)}
-                          disabled={color.stockQuantity <= 0}
-                        >
-                          Select
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                  {(filteredColors || []).map((color) => (
+                    color && (
+                      <TableRow key={color.id}>
+                        <TableCell>
+                          <div className="font-medium">
+                            {color.variant?.product?.productName || "Unknown Product"}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {color.colorName || "Unknown Color"}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{color.colorCode || "N/A"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <StockQuantity stock={color.stockQuantity || 0} />
+                        </TableCell>
+                        <TableCell>Rs. {Math.round(parseFloat(color.variant?.rate || "0"))}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            onClick={() => setSelectedColor(color)}
+                            disabled={(color.stockQuantity || 0) <= 0}
+                          >
+                            Select
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
                   ))}
                 </TableBody>
               </Table>
@@ -872,15 +891,15 @@ export default function UnpaidBills() {
               <div className="space-y-3 p-4 border rounded-md bg-gray-50">
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="font-medium">{selectedColor.variant.product.productName}</div>
+                    <div className="font-medium">{selectedColor.variant?.product?.productName || "Unknown Product"}</div>
                     <div className="text-sm text-gray-500">
-                      {selectedColor.colorName} ({selectedColor.colorCode})
+                      {selectedColor.colorName || "Unknown Color"} ({selectedColor.colorCode || "N/A"})
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold">Rs. {Math.round(parseFloat(selectedColor.variant.rate))}</div>
+                    <div className="font-bold">Rs. {Math.round(parseFloat(selectedColor.variant?.rate || "0"))}</div>
                     <div className="text-sm text-gray-500">
-                      Stock: {selectedColor.stockQuantity}
+                      Stock: {selectedColor.stockQuantity || 0}
                     </div>
                   </div>
                 </div>
@@ -892,7 +911,7 @@ export default function UnpaidBills() {
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
                       min="1"
-                      max={selectedColor.stockQuantity}
+                      max={selectedColor.stockQuantity || 0}
                     />
                   </div>
                   <Button
@@ -921,19 +940,19 @@ export default function UnpaidBills() {
           {itemToReturn && (
             <div className="space-y-4">
               <div>
-                <div className="font-medium">{itemToReturn.color.variant.product.productName}</div>
+                <div className="font-medium">{itemToReturn.color?.variant?.product?.productName || "Unknown Product"}</div>
                 <div className="text-sm text-gray-500">
-                  {itemToReturn.color.colorName} ({itemToReturn.color.colorCode})
+                  {itemToReturn.color?.colorName || "Unknown Color"} ({itemToReturn.color?.colorCode || "N/A"})
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <div className="text-gray-500">Purchased Qty</div>
-                  <div className="font-medium">{itemToReturn.quantity}</div>
+                  <div className="font-medium">{itemToReturn.quantity || 0}</div>
                 </div>
                 <div>
                   <div className="text-gray-500">Rate</div>
-                  <div className="font-medium">Rs. {Math.round(itemToReturn.rate)}</div>
+                  <div className="font-medium">Rs. {Math.round(parseFloat(itemToReturn.rate || "0"))}</div>
                 </div>
               </div>
               <div>
@@ -943,7 +962,7 @@ export default function UnpaidBills() {
                   value={returnQuantity}
                   onChange={(e) => setReturnQuantity(e.target.value)}
                   min="1"
-                  max={itemToReturn.quantity}
+                  max={itemToReturn.quantity || 0}
                 />
               </div>
               <div className="flex gap-2">
