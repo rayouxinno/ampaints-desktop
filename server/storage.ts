@@ -19,19 +19,21 @@ import {
   type SaleWithItems,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, gte, sql, and } from "drizzle-orm";
+import { eq, desc, gte, sql, and, like, or, sum, lt, ne } from "drizzle-orm";
 
 export interface IStorage {
   // Products
   getProducts(): Promise<Product[]>;
   getProduct(id: string): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: string, product: InsertProduct): Promise<Product>;
   deleteProduct(id: string): Promise<void>;
 
   // Variants
   getVariants(): Promise<VariantWithProduct[]>;
   getVariant(id: string): Promise<Variant | undefined>;
   createVariant(variant: InsertVariant): Promise<Variant>;
+  updateVariant(id: string, variant: InsertVariant): Promise<Variant>;
   updateVariantRate(id: string, rate: number): Promise<Variant>;
   deleteVariant(id: string): Promise<void>;
 
@@ -39,12 +41,14 @@ export interface IStorage {
   getColors(): Promise<ColorWithVariantAndProduct[]>;
   getColor(id: string): Promise<Color | undefined>;
   createColor(color: InsertColor): Promise<Color>;
+  updateColor(id: string, color: InsertColor): Promise<Color>;
   updateColorStock(id: string, stockQuantity: number): Promise<Color>;
   stockIn(id: string, quantity: number): Promise<Color>;
   deleteColor(id: string): Promise<void>;
 
   // Sales
   getSales(): Promise<Sale[]>;
+  getRecentSales(limit?: number): Promise<Sale[]>;
   getUnpaidSales(): Promise<Sale[]>;
   findUnpaidSaleByPhone(customerPhone: string): Promise<Sale | undefined>;
   getSale(id: string): Promise<SaleWithItems | undefined>;
@@ -52,6 +56,30 @@ export interface IStorage {
   updateSalePayment(saleId: string, amount: number): Promise<Sale>;
   addSaleItem(saleId: string, item: InsertSaleItem): Promise<SaleItem>;
   deleteSaleItem(saleItemId: string): Promise<void>;
+  returnSaleItem(saleItemId: string, quantity: number, reason: string): Promise<{ success: boolean }>;
+  deleteSale(saleId: string): Promise<void>;
+
+  // Customer Management
+  getCustomerSuggestions(limit?: number): Promise<any[]>;
+  searchCustomers(query: string): Promise<any[]>;
+  getCustomerBills(phone: string): Promise<Sale[]>;
+
+  // Reports
+  getSalesReport(params: { startDate?: string; endDate?: string; groupBy?: string }): Promise<any>;
+  getInventoryReport(lowStockThreshold?: number): Promise<any>;
+  getCustomerDebtReport(): Promise<any>;
+
+  // Search
+  searchProducts(params: { query?: string; company?: string; category?: string }): Promise<any[]>;
+  searchColors(params: { query?: string; company?: string; product?: string; variant?: string }): Promise<any[]>;
+
+  // Bulk Operations
+  bulkStockIn(items: any[]): Promise<any[]>;
+  bulkUpdateRates(updates: any[]): Promise<any[]>;
+
+  // Export/Import
+  exportData(type?: string): Promise<any>;
+  importData(data: any, type: string): Promise<{ success: boolean }>;
 
   // Dashboard Stats
   getDashboardStats(): Promise<{
@@ -82,6 +110,17 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
     };
     await db.insert(products).values(product);
+    return product;
+  }
+
+  async updateProduct(id: string, insertProduct: InsertProduct): Promise<Product> {
+    await db
+      .update(products)
+      .set(insertProduct)
+      .where(eq(products.id, id));
+    
+    const [product] = await db.select().from(products).where(eq(products.id, id));
+    if (!product) throw new Error("Product not found");
     return product;
   }
 
@@ -116,6 +155,20 @@ export class DatabaseStorage implements IStorage {
     return variant;
   }
 
+  async updateVariant(id: string, insertVariant: InsertVariant): Promise<Variant> {
+    await db
+      .update(variants)
+      .set({
+        ...insertVariant,
+        rate: typeof insertVariant.rate === 'number' ? insertVariant.rate.toString() : insertVariant.rate,
+      })
+      .where(eq(variants.id, id));
+    
+    const [variant] = await db.select().from(variants).where(eq(variants.id, id));
+    if (!variant) throw new Error("Variant not found");
+    return variant;
+  }
+
   async updateVariantRate(id: string, rate: number): Promise<Variant> {
     await db
       .update(variants)
@@ -123,6 +176,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(variants.id, id));
     
     const [variant] = await db.select().from(variants).where(eq(variants.id, id));
+    if (!variant) throw new Error("Variant not found");
     return variant;
   }
 
@@ -160,6 +214,17 @@ export class DatabaseStorage implements IStorage {
     return color;
   }
 
+  async updateColor(id: string, insertColor: InsertColor): Promise<Color> {
+    await db
+      .update(colors)
+      .set(insertColor)
+      .where(eq(colors.id, id));
+    
+    const [color] = await db.select().from(colors).where(eq(colors.id, id));
+    if (!color) throw new Error("Color not found");
+    return color;
+  }
+
   async updateColorStock(id: string, stockQuantity: number): Promise<Color> {
     await db
       .update(colors)
@@ -167,6 +232,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(colors.id, id));
     
     const [color] = await db.select().from(colors).where(eq(colors.id, id));
+    if (!color) throw new Error("Color not found");
     return color;
   }
 
@@ -179,6 +245,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(colors.id, id));
     
     const [color] = await db.select().from(colors).where(eq(colors.id, id));
+    if (!color) throw new Error("Color not found");
     return color;
   }
 
@@ -191,11 +258,22 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(sales).orderBy(desc(sales.createdAt));
   }
 
+  async getRecentSales(limit: number = 10): Promise<Sale[]> {
+    return await db
+      .select()
+      .from(sales)
+      .orderBy(desc(sales.createdAt))
+      .limit(limit);
+  }
+
   async getUnpaidSales(): Promise<Sale[]> {
     return await db
       .select()
       .from(sales)
-      .where(sql`${sales.paymentStatus} != 'paid'`)
+      .where(or(
+        eq(sales.paymentStatus, 'unpaid'),
+        eq(sales.paymentStatus, 'partial')
+      ))
       .orderBy(desc(sales.createdAt));
   }
 
@@ -205,7 +283,10 @@ export class DatabaseStorage implements IStorage {
       .from(sales)
       .where(and(
         eq(sales.customerPhone, customerPhone),
-        sql`${sales.paymentStatus} != 'paid'`
+        or(
+          eq(sales.paymentStatus, 'unpaid'),
+          eq(sales.paymentStatus, 'partial')
+        )
       ))
       .orderBy(desc(sales.createdAt))
       .limit(1);
@@ -391,6 +472,313 @@ export class DatabaseStorage implements IStorage {
       .where(eq(sales.id, saleId));
   }
 
+  async returnSaleItem(saleItemId: string, quantity: number, reason: string): Promise<{ success: boolean }> {
+    // Get the sale item
+    const [item] = await db.select().from(saleItems).where(eq(saleItems.id, saleItemId));
+    if (!item) {
+      throw new Error("Sale item not found");
+    }
+
+    if (quantity > item.quantity) {
+      throw new Error("Return quantity exceeds purchased quantity");
+    }
+
+    const saleId = item.saleId;
+
+    // Update sale item quantity and subtotal
+    const newQuantity = item.quantity - quantity;
+    const newSubtotal = parseFloat(item.rate) * newQuantity;
+
+    if (newQuantity === 0) {
+      // Remove item if quantity becomes zero
+      await this.deleteSaleItem(saleItemId);
+    } else {
+      // Update item
+      await db
+        .update(saleItems)
+        .set({
+          quantity: newQuantity,
+          subtotal: newSubtotal.toString(),
+        })
+        .where(eq(saleItems.id, saleItemId));
+
+      // Return stock to inventory
+      await db
+        .update(colors)
+        .set({
+          stockQuantity: sql`${colors.stockQuantity} + ${quantity}`,
+        })
+        .where(eq(colors.id, item.colorId));
+
+      // Recalculate sale total
+      const allItems = await db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
+      const newTotal = allItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+
+      const [sale] = await db.select().from(sales).where(eq(sales.id, saleId));
+      const amountPaid = parseFloat(sale.amountPaid);
+
+      let paymentStatus: string;
+      if (amountPaid >= newTotal) {
+        paymentStatus = "paid";
+      } else if (amountPaid > 0) {
+        paymentStatus = "partial";
+      } else {
+        paymentStatus = "unpaid";
+      }
+
+      await db
+        .update(sales)
+        .set({
+          totalAmount: newTotal.toString(),
+          paymentStatus,
+        })
+        .where(eq(sales.id, saleId));
+    }
+
+    return { success: true };
+  }
+
+  async deleteSale(saleId: string): Promise<void> {
+    // Get all sale items for this sale
+    const items = await db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
+
+    // Return stock for all items
+    for (const item of items) {
+      await db
+        .update(colors)
+        .set({
+          stockQuantity: sql`${colors.stockQuantity} + ${item.quantity}`,
+        })
+        .where(eq(colors.id, item.colorId));
+    }
+
+    // Delete sale items
+    await db.delete(saleItems).where(eq(saleItems.saleId, saleId));
+
+    // Delete sale
+    await db.delete(sales).where(eq(sales.id, saleId));
+  }
+
+  // Customer Management
+  async getCustomerSuggestions(limit: number = 10): Promise<any[]> {
+    const suggestions = await db
+      .select({
+        customerName: sales.customerName,
+        customerPhone: sales.customerPhone,
+        lastSaleDate: sql<string>`MAX(${sales.createdAt})`,
+        totalSpent: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL))`,
+      })
+      .from(sales)
+      .groupBy(sales.customerName, sales.customerPhone)
+      .orderBy(sql`MAX(${sales.createdAt}) DESC`)
+      .limit(limit);
+
+    // Format dates to DD-MM-YYYY
+    return suggestions.map(suggestion => ({
+      ...suggestion,
+      lastSaleDate: this.formatDateToDDMMYYYY(new Date(parseInt(suggestion.lastSaleDate))),
+      totalSpent: Math.round(suggestion.totalSpent || 0)
+    }));
+  }
+
+  async searchCustomers(query: string): Promise<any[]> {
+    const results = await db
+      .select({
+        customerName: sales.customerName,
+        customerPhone: sales.customerPhone,
+        lastSaleDate: sql<string>`MAX(${sales.createdAt})`,
+        totalSpent: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL))`,
+        outstandingBalance: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL))`,
+      })
+      .from(sales)
+      .where(or(
+        like(sales.customerName, `%${query}%`),
+        like(sales.customerPhone, `%${query}%`)
+      ))
+      .groupBy(sales.customerName, sales.customerPhone)
+      .orderBy(sql`MAX(${sales.createdAt}) DESC`);
+
+    // Format dates to DD-MM-YYYY
+    return results.map(result => ({
+      ...result,
+      lastSaleDate: this.formatDateToDDMMYYYY(new Date(parseInt(result.lastSaleDate))),
+      totalSpent: Math.round(result.totalSpent || 0),
+      outstandingBalance: Math.round(result.outstandingBalance || 0)
+    }));
+  }
+
+  async getCustomerBills(phone: string): Promise<Sale[]> {
+    const bills = await db
+      .select()
+      .from(sales)
+      .where(eq(sales.customerPhone, phone))
+      .orderBy(desc(sales.createdAt));
+
+    return bills;
+  }
+
+  // Reports
+  async getSalesReport(params: { startDate?: string; endDate?: string; groupBy?: string }): Promise<any> {
+    // Implementation for sales report
+    return { message: "Sales report functionality to be implemented" };
+  }
+
+  async getInventoryReport(lowStockThreshold: number = 10): Promise<any> {
+    const lowStockItems = await db
+      .select()
+      .from(colors)
+      .innerJoin(variants, eq(colors.variantId, variants.id))
+      .innerJoin(products, eq(variants.productId, products.id))
+      .where(sql`${colors.stockQuantity} <= ${lowStockThreshold}`)
+      .orderBy(colors.stockQuantity);
+
+    return {
+      lowStockItems,
+      threshold: lowStockThreshold
+    };
+  }
+
+  async getCustomerDebtReport(): Promise<any> {
+    const customerDebts = await db
+      .select({
+        customerName: sales.customerName,
+        customerPhone: sales.customerPhone,
+        totalOutstanding: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL))`,
+        billCount: sql<number>`COUNT(*)`,
+        oldestBill: sql<string>`MIN(${sales.createdAt})`,
+      })
+      .from(sales)
+      .where(or(
+        eq(sales.paymentStatus, 'unpaid'),
+        eq(sales.paymentStatus, 'partial')
+      ))
+      .groupBy(sales.customerName, sales.customerPhone)
+      .orderBy(sql`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL)) DESC`);
+
+    // Format dates to DD-MM-YYYY
+    return customerDebts.map(debt => ({
+      ...debt,
+      oldestBill: this.formatDateToDDMMYYYY(new Date(parseInt(debt.oldestBill))),
+      totalOutstanding: Math.round(debt.totalOutstanding || 0)
+    }));
+  }
+
+  // Search
+  async searchProducts(params: { query?: string; company?: string; category?: string }): Promise<any[]> {
+    let whereConditions = [];
+
+    if (params.query) {
+      whereConditions.push(or(
+        like(products.productName, `%${params.query}%`),
+        like(products.company, `%${params.query}%`)
+      ));
+    }
+
+    if (params.company) {
+      whereConditions.push(eq(products.company, params.company));
+    }
+
+    const results = await db
+      .select()
+      .from(products)
+      .where(and(...whereConditions))
+      .orderBy(desc(products.createdAt));
+
+    return results;
+  }
+
+  async searchColors(params: { query?: string; company?: string; product?: string; variant?: string }): Promise<any[]> {
+    let whereConditions = [];
+
+    if (params.query) {
+      whereConditions.push(or(
+        like(colors.colorName, `%${params.query}%`),
+        like(colors.colorCode, `%${params.query}%`)
+      ));
+    }
+
+    const results = await db.query.colors.findMany({
+      where: and(...whereConditions),
+      with: {
+        variant: {
+          with: {
+            product: true,
+          },
+        },
+      },
+      orderBy: desc(colors.createdAt),
+    });
+
+    // Additional filtering
+    let filteredResults = results;
+
+    if (params.company) {
+      filteredResults = filteredResults.filter(color => 
+        color.variant.product.company.includes(params.company!)
+      );
+    }
+
+    if (params.product) {
+      filteredResults = filteredResults.filter(color => 
+        color.variant.product.productName.includes(params.product!)
+      );
+    }
+
+    if (params.variant) {
+      filteredResults = filteredResults.filter(color => 
+        color.variant.packingSize.includes(params.variant!)
+      );
+    }
+
+    return filteredResults;
+  }
+
+  // Bulk Operations
+  async bulkStockIn(items: any[]): Promise<any[]> {
+    const results = [];
+    for (const item of items) {
+      try {
+        const result = await this.stockIn(item.colorId, item.quantity);
+        results.push({ success: true, colorId: item.colorId, result });
+      } catch (error) {
+        results.push({ success: false, colorId: item.colorId, error: (error as Error).message });
+      }
+    }
+    return results;
+  }
+
+  async bulkUpdateRates(updates: any[]): Promise<any[]> {
+    const results = [];
+    for (const update of updates) {
+      try {
+        const result = await this.updateVariantRate(update.variantId, update.rate);
+        results.push({ success: true, variantId: update.variantId, result });
+      } catch (error) {
+        results.push({ success: false, variantId: update.variantId, error: (error as Error).message });
+      }
+    }
+    return results;
+  }
+
+  // Export/Import
+  async exportData(type?: string): Promise<any> {
+    // Implementation for data export
+    return { message: "Export functionality to be implemented" };
+  }
+
+  async importData(data: any, type: string): Promise<{ success: boolean }> {
+    // Implementation for data import
+    return { success: true, message: "Import functionality to be implemented" };
+  }
+
+  // Helper function to format dates to DD-MM-YYYY
+  private formatDateToDDMMYYYY(date: Date): string {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+
   // Dashboard Stats
   async getDashboardStats() {
     const now = new Date();
@@ -398,8 +786,8 @@ export class DatabaseStorage implements IStorage {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Convert dates to Unix timestamps for SQLite
-    const todayStartTimestamp = Math.floor(todayStart.getTime() / 1000) * 1000;
-    const monthStartTimestamp = Math.floor(monthStart.getTime() / 1000) * 1000;
+    const todayStartTimestamp = Math.floor(todayStart.getTime());
+    const monthStartTimestamp = Math.floor(monthStart.getTime());
 
     // Today's sales
     const todaySalesData = await db
@@ -443,7 +831,10 @@ export class DatabaseStorage implements IStorage {
         totalAmount: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL)), 0)`,
       })
       .from(sales)
-      .where(sql`${sales.paymentStatus} != 'paid'`);
+      .where(or(
+        eq(sales.paymentStatus, 'unpaid'),
+        eq(sales.paymentStatus, 'partial')
+      ));
 
     // Recent sales
     const recentSales = await db
@@ -455,7 +846,7 @@ export class DatabaseStorage implements IStorage {
     // Monthly chart data (last 30 days)
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoTimestamp = Math.floor(thirtyDaysAgo.getTime() / 1000) * 1000;
+    const thirtyDaysAgoTimestamp = Math.floor(thirtyDaysAgo.getTime());
 
     const dailySales = await db
       .select({
@@ -466,6 +857,15 @@ export class DatabaseStorage implements IStorage {
       .where(sql`${sales.createdAt} >= ${thirtyDaysAgoTimestamp}`)
       .groupBy(sql`DATE(${sales.createdAt} / 1000, 'unixepoch')`)
       .orderBy(sql`DATE(${sales.createdAt} / 1000, 'unixepoch')`);
+
+    // Format dates to DD-MM-YYYY for monthly chart
+    const formattedMonthlyChart = dailySales.map((day) => {
+      const date = new Date(day.date);
+      return {
+        date: this.formatDateToDDMMYYYY(date),
+        revenue: Number(day.revenue),
+      };
+    });
 
     return {
       todaySales: {
@@ -488,10 +888,7 @@ export class DatabaseStorage implements IStorage {
         totalAmount: Number(unpaidData[0]?.totalAmount || 0),
       },
       recentSales,
-      monthlyChart: dailySales.map((day) => ({
-        date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        revenue: Number(day.revenue),
-      })),
+      monthlyChart: formattedMonthlyChart,
     };
   }
 }
