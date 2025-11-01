@@ -95,12 +95,23 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // Products
   async getProducts(): Promise<Product[]> {
-    return await db.select().from(products).orderBy(desc(products.createdAt));
+    try {
+      const result = await db.select().from(products).orderBy(desc(products.createdAt));
+      return result || [];
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      return [];
+    }
   }
 
   async getProduct(id: string): Promise<Product | undefined> {
-    const [product] = await db.select().from(products).where(eq(products.id, id));
-    return product || undefined;
+    try {
+      const [product] = await db.select().from(products).where(eq(products.id, id));
+      return product || undefined;
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      return undefined;
+    }
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
@@ -130,18 +141,28 @@ export class DatabaseStorage implements IStorage {
 
   // Variants
   async getVariants(): Promise<VariantWithProduct[]> {
-    const result = await db.query.variants.findMany({
-      with: {
-        product: true,
-      },
-      orderBy: desc(variants.createdAt),
-    });
-    return result;
+    try {
+      const result = await db.query.variants.findMany({
+        with: {
+          product: true,
+        },
+        orderBy: desc(variants.createdAt),
+      });
+      return result || [];
+    } catch (error) {
+      console.error("Error fetching variants:", error);
+      return [];
+    }
   }
 
   async getVariant(id: string): Promise<Variant | undefined> {
-    const [variant] = await db.select().from(variants).where(eq(variants.id, id));
-    return variant || undefined;
+    try {
+      const [variant] = await db.select().from(variants).where(eq(variants.id, id));
+      return variant || undefined;
+    } catch (error) {
+      console.error("Error fetching variant:", error);
+      return undefined;
+    }
   }
 
   async createVariant(insertVariant: InsertVariant): Promise<Variant> {
@@ -186,22 +207,32 @@ export class DatabaseStorage implements IStorage {
 
   // Colors
   async getColors(): Promise<ColorWithVariantAndProduct[]> {
-    const result = await db.query.colors.findMany({
-      with: {
-        variant: {
-          with: {
-            product: true,
+    try {
+      const result = await db.query.colors.findMany({
+        with: {
+          variant: {
+            with: {
+              product: true,
+            },
           },
         },
-      },
-      orderBy: desc(colors.createdAt),
-    });
-    return result;
+        orderBy: desc(colors.createdAt),
+      });
+      return result || [];
+    } catch (error) {
+      console.error("Error fetching colors:", error);
+      return [];
+    }
   }
 
   async getColor(id: string): Promise<Color | undefined> {
-    const [color] = await db.select().from(colors).where(eq(colors.id, id));
-    return color || undefined;
+    try {
+      const [color] = await db.select().from(colors).where(eq(colors.id, id));
+      return color || undefined;
+    } catch (error) {
+      console.error("Error fetching color:", error);
+      return undefined;
+    }
   }
 
   async createColor(insertColor: InsertColor): Promise<Color> {
@@ -255,64 +286,92 @@ export class DatabaseStorage implements IStorage {
 
   // Sales
   async getSales(): Promise<Sale[]> {
-    return await db.select().from(sales).orderBy(desc(sales.createdAt));
+    try {
+      const result = await db.select().from(sales).orderBy(desc(sales.createdAt));
+      return result || [];
+    } catch (error) {
+      console.error("Error fetching sales:", error);
+      return [];
+    }
   }
 
   async getRecentSales(limit: number = 10): Promise<Sale[]> {
-    return await db
-      .select()
-      .from(sales)
-      .orderBy(desc(sales.createdAt))
-      .limit(limit);
+    try {
+      const result = await db
+        .select()
+        .from(sales)
+        .orderBy(desc(sales.createdAt))
+        .limit(limit);
+      return result || [];
+    } catch (error) {
+      console.error("Error fetching recent sales:", error);
+      return [];
+    }
   }
 
   async getUnpaidSales(): Promise<Sale[]> {
-    return await db
-      .select()
-      .from(sales)
-      .where(or(
-        eq(sales.paymentStatus, 'unpaid'),
-        eq(sales.paymentStatus, 'partial')
-      ))
-      .orderBy(desc(sales.createdAt));
+    try {
+      const result = await db
+        .select()
+        .from(sales)
+        .where(or(
+          eq(sales.paymentStatus, 'unpaid'),
+          eq(sales.paymentStatus, 'partial')
+        ))
+        .orderBy(desc(sales.createdAt));
+      return result || [];
+    } catch (error) {
+      console.error("Error fetching unpaid sales:", error);
+      return [];
+    }
   }
 
   async findUnpaidSaleByPhone(customerPhone: string): Promise<Sale | undefined> {
-    const [sale] = await db
-      .select()
-      .from(sales)
-      .where(and(
-        eq(sales.customerPhone, customerPhone),
-        or(
-          eq(sales.paymentStatus, 'unpaid'),
-          eq(sales.paymentStatus, 'partial')
-        )
-      ))
-      .orderBy(desc(sales.createdAt))
-      .limit(1);
-    return sale;
+    try {
+      const [sale] = await db
+        .select()
+        .from(sales)
+        .where(and(
+          eq(sales.customerPhone, customerPhone),
+          or(
+            eq(sales.paymentStatus, 'unpaid'),
+            eq(sales.paymentStatus, 'partial')
+          )
+        ))
+        .orderBy(desc(sales.createdAt))
+        .limit(1);
+      return sale;
+    } catch (error) {
+      console.error("Error finding unpaid sale by phone:", error);
+      return undefined;
+    }
   }
 
   async getSale(id: string): Promise<SaleWithItems | undefined> {
-    const result = await db.query.sales.findFirst({
-      where: eq(sales.id, id),
-      with: {
-        saleItems: {
-          with: {
-            color: {
-              with: {
-                variant: {
-                  with: {
-                    product: true,
+    try {
+      const result = await db.query.sales.findFirst({
+        where: eq(sales.id, id),
+        with: {
+          saleItems: {
+            with: {
+              color: {
+                with: {
+                  variant: {
+                    with: {
+                      product: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    });
-    return result;
+      });
+      return result || undefined;
+    } catch (error) {
+      console.error("Error fetching sale:", error);
+      return undefined;
+    }
   }
 
   async createSale(insertSale: InsertSale, items: InsertSaleItem[]): Promise<Sale> {
@@ -561,60 +620,74 @@ export class DatabaseStorage implements IStorage {
 
   // Customer Management
   async getCustomerSuggestions(limit: number = 10): Promise<any[]> {
-    const suggestions = await db
-      .select({
-        customerName: sales.customerName,
-        customerPhone: sales.customerPhone,
-        lastSaleDate: sql<string>`MAX(${sales.createdAt})`,
-        totalSpent: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL))`,
-      })
-      .from(sales)
-      .groupBy(sales.customerName, sales.customerPhone)
-      .orderBy(sql`MAX(${sales.createdAt}) DESC`)
-      .limit(limit);
+    try {
+      const suggestions = await db
+        .select({
+          customerName: sales.customerName,
+          customerPhone: sales.customerPhone,
+          lastSaleDate: sql<string>`MAX(${sales.createdAt})`,
+          totalSpent: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL))`,
+        })
+        .from(sales)
+        .groupBy(sales.customerName, sales.customerPhone)
+        .orderBy(sql`MAX(${sales.createdAt}) DESC`)
+        .limit(limit);
 
-    // Format dates to DD-MM-YYYY
-    return suggestions.map(suggestion => ({
-      ...suggestion,
-      lastSaleDate: this.formatDateToDDMMYYYY(new Date(parseInt(suggestion.lastSaleDate))),
-      totalSpent: Math.round(suggestion.totalSpent || 0)
-    }));
+      // Format dates to DD-MM-YYYY and ensure safe array mapping
+      return (suggestions || []).map(suggestion => ({
+        ...suggestion,
+        lastSaleDate: this.formatDateToDDMMYYYY(new Date(parseInt(suggestion.lastSaleDate || Date.now().toString()))),
+        totalSpent: Math.round(suggestion.totalSpent || 0)
+      }));
+    } catch (error) {
+      console.error("Error fetching customer suggestions:", error);
+      return [];
+    }
   }
 
   async searchCustomers(query: string): Promise<any[]> {
-    const results = await db
-      .select({
-        customerName: sales.customerName,
-        customerPhone: sales.customerPhone,
-        lastSaleDate: sql<string>`MAX(${sales.createdAt})`,
-        totalSpent: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL))`,
-        outstandingBalance: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL))`,
-      })
-      .from(sales)
-      .where(or(
-        like(sales.customerName, `%${query}%`),
-        like(sales.customerPhone, `%${query}%`)
-      ))
-      .groupBy(sales.customerName, sales.customerPhone)
-      .orderBy(sql`MAX(${sales.createdAt}) DESC`);
+    try {
+      const results = await db
+        .select({
+          customerName: sales.customerName,
+          customerPhone: sales.customerPhone,
+          lastSaleDate: sql<string>`MAX(${sales.createdAt})`,
+          totalSpent: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL))`,
+          outstandingBalance: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL))`,
+        })
+        .from(sales)
+        .where(or(
+          like(sales.customerName, `%${query}%`),
+          like(sales.customerPhone, `%${query}%`)
+        ))
+        .groupBy(sales.customerName, sales.customerPhone)
+        .orderBy(sql`MAX(${sales.createdAt}) DESC`);
 
-    // Format dates to DD-MM-YYYY
-    return results.map(result => ({
-      ...result,
-      lastSaleDate: this.formatDateToDDMMYYYY(new Date(parseInt(result.lastSaleDate))),
-      totalSpent: Math.round(result.totalSpent || 0),
-      outstandingBalance: Math.round(result.outstandingBalance || 0)
-    }));
+      // Format dates to DD-MM-YYYY and ensure safe array mapping
+      return (results || []).map(result => ({
+        ...result,
+        lastSaleDate: this.formatDateToDDMMYYYY(new Date(parseInt(result.lastSaleDate || Date.now().toString()))),
+        totalSpent: Math.round(result.totalSpent || 0),
+        outstandingBalance: Math.round(result.outstandingBalance || 0)
+      }));
+    } catch (error) {
+      console.error("Error searching customers:", error);
+      return [];
+    }
   }
 
   async getCustomerBills(phone: string): Promise<Sale[]> {
-    const bills = await db
-      .select()
-      .from(sales)
-      .where(eq(sales.customerPhone, phone))
-      .orderBy(desc(sales.createdAt));
-
-    return bills;
+    try {
+      const bills = await db
+        .select()
+        .from(sales)
+        .where(eq(sales.customerPhone, phone))
+        .orderBy(desc(sales.createdAt));
+      return bills || [];
+    } catch (error) {
+      console.error("Error fetching customer bills:", error);
+      return [];
+    }
   }
 
   // Reports
@@ -624,113 +697,133 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInventoryReport(lowStockThreshold: number = 10): Promise<any> {
-    const lowStockItems = await db
-      .select()
-      .from(colors)
-      .innerJoin(variants, eq(colors.variantId, variants.id))
-      .innerJoin(products, eq(variants.productId, products.id))
-      .where(sql`${colors.stockQuantity} <= ${lowStockThreshold}`)
-      .orderBy(colors.stockQuantity);
+    try {
+      const lowStockItems = await db
+        .select()
+        .from(colors)
+        .innerJoin(variants, eq(colors.variantId, variants.id))
+        .innerJoin(products, eq(variants.productId, products.id))
+        .where(sql`${colors.stockQuantity} <= ${lowStockThreshold}`)
+        .orderBy(colors.stockQuantity);
 
-    return {
-      lowStockItems,
-      threshold: lowStockThreshold
-    };
+      return {
+        lowStockItems: lowStockItems || [],
+        threshold: lowStockThreshold
+      };
+    } catch (error) {
+      console.error("Error generating inventory report:", error);
+      return { lowStockItems: [], threshold: lowStockThreshold };
+    }
   }
 
   async getCustomerDebtReport(): Promise<any> {
-    const customerDebts = await db
-      .select({
-        customerName: sales.customerName,
-        customerPhone: sales.customerPhone,
-        totalOutstanding: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL))`,
-        billCount: sql<number>`COUNT(*)`,
-        oldestBill: sql<string>`MIN(${sales.createdAt})`,
-      })
-      .from(sales)
-      .where(or(
-        eq(sales.paymentStatus, 'unpaid'),
-        eq(sales.paymentStatus, 'partial')
-      ))
-      .groupBy(sales.customerName, sales.customerPhone)
-      .orderBy(sql`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL)) DESC`);
+    try {
+      const customerDebts = await db
+        .select({
+          customerName: sales.customerName,
+          customerPhone: sales.customerPhone,
+          totalOutstanding: sql<number>`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL))`,
+          billCount: sql<number>`COUNT(*)`,
+          oldestBill: sql<string>`MIN(${sales.createdAt})`,
+        })
+        .from(sales)
+        .where(or(
+          eq(sales.paymentStatus, 'unpaid'),
+          eq(sales.paymentStatus, 'partial')
+        ))
+        .groupBy(sales.customerName, sales.customerPhone)
+        .orderBy(sql`SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL)) DESC`);
 
-    // Format dates to DD-MM-YYYY
-    return customerDebts.map(debt => ({
-      ...debt,
-      oldestBill: this.formatDateToDDMMYYYY(new Date(parseInt(debt.oldestBill))),
-      totalOutstanding: Math.round(debt.totalOutstanding || 0)
-    }));
+      // Format dates to DD-MM-YYYY and ensure safe array mapping
+      return (customerDebts || []).map(debt => ({
+        ...debt,
+        oldestBill: this.formatDateToDDMMYYYY(new Date(parseInt(debt.oldestBill || Date.now().toString()))),
+        totalOutstanding: Math.round(debt.totalOutstanding || 0)
+      }));
+    } catch (error) {
+      console.error("Error generating customer debt report:", error);
+      return [];
+    }
   }
 
   // Search
   async searchProducts(params: { query?: string; company?: string; category?: string }): Promise<any[]> {
-    let whereConditions = [];
+    try {
+      let whereConditions = [];
 
-    if (params.query) {
-      whereConditions.push(or(
-        like(products.productName, `%${params.query}%`),
-        like(products.company, `%${params.query}%`)
-      ));
+      if (params.query) {
+        whereConditions.push(or(
+          like(products.productName, `%${params.query}%`),
+          like(products.company, `%${params.query}%`)
+        ));
+      }
+
+      if (params.company) {
+        whereConditions.push(eq(products.company, params.company));
+      }
+
+      const results = await db
+        .select()
+        .from(products)
+        .where(and(...whereConditions))
+        .orderBy(desc(products.createdAt));
+
+      return results || [];
+    } catch (error) {
+      console.error("Error searching products:", error);
+      return [];
     }
-
-    if (params.company) {
-      whereConditions.push(eq(products.company, params.company));
-    }
-
-    const results = await db
-      .select()
-      .from(products)
-      .where(and(...whereConditions))
-      .orderBy(desc(products.createdAt));
-
-    return results;
   }
 
   async searchColors(params: { query?: string; company?: string; product?: string; variant?: string }): Promise<any[]> {
-    let whereConditions = [];
+    try {
+      let whereConditions = [];
 
-    if (params.query) {
-      whereConditions.push(or(
-        like(colors.colorName, `%${params.query}%`),
-        like(colors.colorCode, `%${params.query}%`)
-      ));
-    }
+      if (params.query) {
+        whereConditions.push(or(
+          like(colors.colorName, `%${params.query}%`),
+          like(colors.colorCode, `%${params.query}%`)
+        ));
+      }
 
-    const results = await db.query.colors.findMany({
-      where: and(...whereConditions),
-      with: {
-        variant: {
-          with: {
-            product: true,
+      const results = await db.query.colors.findMany({
+        where: and(...whereConditions),
+        with: {
+          variant: {
+            with: {
+              product: true,
+            },
           },
         },
-      },
-      orderBy: desc(colors.createdAt),
-    });
+        orderBy: desc(colors.createdAt),
+      });
 
-    // Additional filtering
-    let filteredResults = results;
+      // Additional filtering
+      let filteredResults = results || [];
 
-    if (params.company) {
-      filteredResults = filteredResults.filter(color => 
-        color.variant.product.company.includes(params.company!)
-      );
+      if (params.company) {
+        filteredResults = filteredResults.filter(color => 
+          color?.variant?.product?.company?.includes(params.company!)
+        );
+      }
+
+      if (params.product) {
+        filteredResults = filteredResults.filter(color => 
+          color?.variant?.product?.productName?.includes(params.product!)
+        );
+      }
+
+      if (params.variant) {
+        filteredResults = filteredResults.filter(color => 
+          color?.variant?.packingSize?.includes(params.variant!)
+        );
+      }
+
+      return filteredResults;
+    } catch (error) {
+      console.error("Error searching colors:", error);
+      return [];
     }
-
-    if (params.product) {
-      filteredResults = filteredResults.filter(color => 
-        color.variant.product.productName.includes(params.product!)
-      );
-    }
-
-    if (params.variant) {
-      filteredResults = filteredResults.filter(color => 
-        color.variant.packingSize.includes(params.variant!)
-      );
-    }
-
-    return filteredResults;
   }
 
   // Bulk Operations
@@ -773,123 +866,148 @@ export class DatabaseStorage implements IStorage {
 
   // Helper function to format dates to DD-MM-YYYY
   private formatDateToDDMMYYYY(date: Date): string {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
+    try {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}-${month}-${year}`;
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "01-01-2024"; // Default fallback date
+    }
   }
 
   // Dashboard Stats
   async getDashboardStats() {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    try {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Convert dates to Unix timestamps for SQLite
-    const todayStartTimestamp = Math.floor(todayStart.getTime());
-    const monthStartTimestamp = Math.floor(monthStart.getTime());
+      // Convert dates to Unix timestamps for SQLite
+      const todayStartTimestamp = Math.floor(todayStart.getTime());
+      const monthStartTimestamp = Math.floor(monthStart.getTime());
 
-    // Today's sales
-    const todaySalesData = await db
-      .select({
-        revenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL)), 0)`,
-        transactions: sql<number>`COUNT(*)`,
-      })
-      .from(sales)
-      .where(sql`${sales.createdAt} >= ${todayStartTimestamp}`);
+      // Today's sales
+      const todaySalesData = await db
+        .select({
+          revenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL)), 0)`,
+          transactions: sql<number>`COUNT(*)`,
+        })
+        .from(sales)
+        .where(sql`${sales.createdAt} >= ${todayStartTimestamp}`);
 
-    // Monthly sales
-    const monthlySalesData = await db
-      .select({
-        revenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL)), 0)`,
-        transactions: sql<number>`COUNT(*)`,
-      })
-      .from(sales)
-      .where(sql`${sales.createdAt} >= ${monthStartTimestamp}`);
+      // Monthly sales
+      const monthlySalesData = await db
+        .select({
+          revenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL)), 0)`,
+          transactions: sql<number>`COUNT(*)`,
+        })
+        .from(sales)
+        .where(sql`${sales.createdAt} >= ${monthStartTimestamp}`);
 
-    // Inventory stats
-    const totalProducts = await db.select({ count: sql<number>`COUNT(*)` }).from(products);
-    const totalVariants = await db.select({ count: sql<number>`COUNT(*)` }).from(variants);
-    const totalColors = await db.select({ count: sql<number>`COUNT(*)` }).from(colors);
-    const lowStockColors = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(colors)
-      .where(sql`${colors.stockQuantity} < 10 AND ${colors.stockQuantity} > 0`);
-    
-    // Calculate total stock value (stockQuantity * rate for all colors)
-    const totalStockValue = await db
-      .select({
-        value: sql<number>`COALESCE(SUM(${colors.stockQuantity} * CAST(${variants.rate} AS REAL)), 0)`,
-      })
-      .from(colors)
-      .innerJoin(variants, eq(colors.variantId, variants.id));
+      // Inventory stats
+      const totalProducts = await db.select({ count: sql<number>`COUNT(*)` }).from(products);
+      const totalVariants = await db.select({ count: sql<number>`COUNT(*)` }).from(variants);
+      const totalColors = await db.select({ count: sql<number>`COUNT(*)` }).from(colors);
+      const lowStockColors = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(colors)
+        .where(sql`${colors.stockQuantity} < 10 AND ${colors.stockQuantity} > 0`);
+      
+      // Calculate total stock value (stockQuantity * rate for all colors)
+      const totalStockValue = await db
+        .select({
+          value: sql<number>`COALESCE(SUM(${colors.stockQuantity} * CAST(${variants.rate} AS REAL)), 0)`,
+        })
+        .from(colors)
+        .innerJoin(variants, eq(colors.variantId, variants.id));
 
-    // Unpaid bills
-    const unpaidData = await db
-      .select({
-        count: sql<number>`COUNT(*)`,
-        totalAmount: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL)), 0)`,
-      })
-      .from(sales)
-      .where(or(
-        eq(sales.paymentStatus, 'unpaid'),
-        eq(sales.paymentStatus, 'partial')
-      ));
+      // Unpaid bills
+      const unpaidData = await db
+        .select({
+          count: sql<number>`COUNT(*)`,
+          totalAmount: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL) - CAST(${sales.amountPaid} AS REAL)), 0)`,
+        })
+        .from(sales)
+        .where(or(
+          eq(sales.paymentStatus, 'unpaid'),
+          eq(sales.paymentStatus, 'partial')
+        ));
 
-    // Recent sales
-    const recentSales = await db
-      .select()
-      .from(sales)
-      .orderBy(desc(sales.createdAt))
-      .limit(10);
+      // Recent sales
+      const recentSales = await db
+        .select()
+        .from(sales)
+        .orderBy(desc(sales.createdAt))
+        .limit(10);
 
-    // Monthly chart data (last 30 days)
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoTimestamp = Math.floor(thirtyDaysAgo.getTime());
+      // Monthly chart data (last 30 days)
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoTimestamp = Math.floor(thirtyDaysAgo.getTime());
 
-    const dailySales = await db
-      .select({
-        date: sql<string>`DATE(${sales.createdAt} / 1000, 'unixepoch')`,
-        revenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL)), 0)`,
-      })
-      .from(sales)
-      .where(sql`${sales.createdAt} >= ${thirtyDaysAgoTimestamp}`)
-      .groupBy(sql`DATE(${sales.createdAt} / 1000, 'unixepoch')`)
-      .orderBy(sql`DATE(${sales.createdAt} / 1000, 'unixepoch')`);
+      const dailySales = await db
+        .select({
+          date: sql<string>`DATE(${sales.createdAt} / 1000, 'unixepoch')`,
+          revenue: sql<number>`COALESCE(SUM(CAST(${sales.totalAmount} AS REAL)), 0)`,
+        })
+        .from(sales)
+        .where(sql`${sales.createdAt} >= ${thirtyDaysAgoTimestamp}`)
+        .groupBy(sql`DATE(${sales.createdAt} / 1000, 'unixepoch')`)
+        .orderBy(sql`DATE(${sales.createdAt} / 1000, 'unixepoch')`);
 
-    // Format dates to DD-MM-YYYY for monthly chart
-    const formattedMonthlyChart = dailySales.map((day) => {
-      const date = new Date(day.date);
+      // Format dates to DD-MM-YYYY for monthly chart
+      const formattedMonthlyChart = (dailySales || []).map((day) => {
+        try {
+          const date = new Date(day.date);
+          return {
+            date: this.formatDateToDDMMYYYY(date),
+            revenue: Number(day.revenue || 0),
+          };
+        } catch (error) {
+          return {
+            date: this.formatDateToDDMMYYYY(new Date()),
+            revenue: Number(day.revenue || 0),
+          };
+        }
+      });
+
       return {
-        date: this.formatDateToDDMMYYYY(date),
-        revenue: Number(day.revenue),
+        todaySales: {
+          revenue: Number(todaySalesData[0]?.revenue || 0),
+          transactions: Number(todaySalesData[0]?.transactions || 0),
+        },
+        monthlySales: {
+          revenue: Number(monthlySalesData[0]?.revenue || 0),
+          transactions: Number(monthlySalesData[0]?.transactions || 0),
+        },
+        inventory: {
+          totalProducts: Number(totalProducts[0]?.count || 0),
+          totalVariants: Number(totalVariants[0]?.count || 0),
+          totalColors: Number(totalColors[0]?.count || 0),
+          lowStock: Number(lowStockColors[0]?.count || 0),
+          totalStockValue: Number(totalStockValue[0]?.value || 0),
+        },
+        unpaidBills: {
+          count: Number(unpaidData[0]?.count || 0),
+          totalAmount: Number(unpaidData[0]?.totalAmount || 0),
+        },
+        recentSales: recentSales || [],
+        monthlyChart: formattedMonthlyChart,
       };
-    });
-
-    return {
-      todaySales: {
-        revenue: Number(todaySalesData[0]?.revenue || 0),
-        transactions: Number(todaySalesData[0]?.transactions || 0),
-      },
-      monthlySales: {
-        revenue: Number(monthlySalesData[0]?.revenue || 0),
-        transactions: Number(monthlySalesData[0]?.transactions || 0),
-      },
-      inventory: {
-        totalProducts: Number(totalProducts[0]?.count || 0),
-        totalVariants: Number(totalVariants[0]?.count || 0),
-        totalColors: Number(totalColors[0]?.count || 0),
-        lowStock: Number(lowStockColors[0]?.count || 0),
-        totalStockValue: Number(totalStockValue[0]?.value || 0),
-      },
-      unpaidBills: {
-        count: Number(unpaidData[0]?.count || 0),
-        totalAmount: Number(unpaidData[0]?.totalAmount || 0),
-      },
-      recentSales,
-      monthlyChart: formattedMonthlyChart,
-    };
+    } catch (error) {
+      console.error("Error fetching dashboard stats:", error);
+      // Return default empty stats to prevent frontend crashes
+      return {
+        todaySales: { revenue: 0, transactions: 0 },
+        monthlySales: { revenue: 0, transactions: 0 },
+        inventory: { totalProducts: 0, totalVariants: 0, totalColors: 0, lowStock: 0, totalStockValue: 0 },
+        unpaidBills: { count: 0, totalAmount: 0 },
+        recentSales: [],
+        monthlyChart: [],
+      };
+    }
   }
 }
 
