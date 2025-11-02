@@ -193,6 +193,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Customer Suggestions
+  app.get("/api/customers/suggestions", async (_req, res) => {
+    try {
+      const sales = await storage.getSales();
+      
+      // Group sales by customer phone and get latest data
+      const customerMap = new Map();
+      
+      sales.forEach(sale => {
+        if (!sale.customerPhone) return;
+        
+        const existing = customerMap.get(sale.customerPhone);
+        if (!existing || new Date(sale.createdAt) > new Date(existing.lastSaleDate)) {
+          customerMap.set(sale.customerPhone, {
+            customerName: sale.customerName,
+            customerPhone: sale.customerPhone,
+            lastSaleDate: sale.createdAt,
+            totalSpent: (existing?.totalSpent || 0) + parseFloat(sale.totalAmount)
+          });
+        } else {
+          existing.totalSpent += parseFloat(sale.totalAmount);
+        }
+      });
+      
+      const suggestions = Array.from(customerMap.values())
+        .sort((a, b) => new Date(b.lastSaleDate).getTime() - new Date(a.lastSaleDate).getTime())
+        .slice(0, 10); // Return top 10 recent customers
+      
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Error fetching customer suggestions:", error);
+      res.status(500).json({ error: "Failed to fetch customer suggestions" });
+    }
+  });
+
   app.post("/api/sales", async (req, res) => {
     try {
       const { items, ...saleData } = req.body;
