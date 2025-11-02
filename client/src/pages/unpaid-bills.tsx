@@ -20,12 +20,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CreditCard, Calendar, User, Phone, Plus, Trash2, Eye, Search, Banknote, Printer, Receipt } from "lucide-react";
+import { 
+  CreditCard, 
+  Calendar, 
+  User, 
+  Phone, 
+  Plus, 
+  Trash2, 
+  Eye, 
+  Search, 
+  Banknote, 
+  Printer, 
+  Receipt,
+  Filter,
+  X,
+  ChevronDown
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Sale, SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 type ConsolidatedCustomer = {
   customerPhone: string;
@@ -35,6 +57,17 @@ type ConsolidatedCustomer = {
   totalPaid: number;
   totalOutstanding: number;
   oldestBillDate: Date;
+  daysOverdue: number;
+};
+
+type FilterType = {
+  search: string;
+  amountRange: {
+    min: string;
+    max: string;
+  };
+  daysOverdue: string;
+  sortBy: "oldest" | "newest" | "highest" | "lowest" | "name";
 };
 
 export default function UnpaidBills() {
@@ -45,7 +78,18 @@ export default function UnpaidBills() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
   const [quantity, setQuantity] = useState("1");
+  const [filterOpen, setFilterOpen] = useState(false);
   const { toast } = useToast();
+
+  const [filters, setFilters] = useState<FilterType>({
+    search: "",
+    amountRange: {
+      min: "",
+      max: ""
+    },
+    daysOverdue: "",
+    sortBy: "oldest"
+  });
 
   const { data: unpaidSales = [], isLoading } = useQuery<Sale[]>({
     queryKey: ["/api/sales/unpaid"],
@@ -297,6 +341,7 @@ export default function UnpaidBills() {
       const totalPaid = parseFloat(sale.amountPaid);
       const outstanding = totalAmount - totalPaid;
       const billDate = new Date(sale.createdAt);
+      const daysOverdue = getDaysOverdue(billDate);
       
       if (existing) {
         existing.bills.push(sale);
@@ -305,6 +350,7 @@ export default function UnpaidBills() {
         existing.totalOutstanding += outstanding;
         if (billDate < existing.oldestBillDate) {
           existing.oldestBillDate = billDate;
+          existing.daysOverdue = daysOverdue;
         }
       } else {
         customerMap.set(phone, {
@@ -315,25 +361,254 @@ export default function UnpaidBills() {
           totalPaid,
           totalOutstanding: outstanding,
           oldestBillDate: billDate,
+          daysOverdue,
         });
       }
     });
     
-    return Array.from(customerMap.values()).sort((a, b) => {
-      return a.oldestBillDate.getTime() - b.oldestBillDate.getTime();
-    });
+    return Array.from(customerMap.values());
   }, [unpaidSales]);
+
+  const filteredAndSortedCustomers = useMemo(() => {
+    let filtered = [...consolidatedCustomers];
+
+    // Apply search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(customer => 
+        customer.customerName.toLowerCase().includes(searchLower) ||
+        customer.customerPhone.includes(searchLower)
+      );
+    }
+
+    // Apply amount range filter
+    if (filters.amountRange.min) {
+      const min = parseFloat(filters.amountRange.min);
+      filtered = filtered.filter(customer => customer.totalOutstanding >= min);
+    }
+    if (filters.amountRange.max) {
+      const max = parseFloat(filters.amountRange.max);
+      filtered = filtered.filter(customer => customer.totalOutstanding <= max);
+    }
+
+    // Apply days overdue filter
+    if (filters.daysOverdue) {
+      const days = parseInt(filters.daysOverdue);
+      filtered = filtered.filter(customer => customer.daysOverdue >= days);
+    }
+
+    // Apply sorting
+    switch (filters.sortBy) {
+      case "newest":
+        filtered.sort((a, b) => b.oldestBillDate.getTime() - a.oldestBillDate.getTime());
+        break;
+      case "highest":
+        filtered.sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+        break;
+      case "lowest":
+        filtered.sort((a, b) => a.totalOutstanding - b.totalOutstanding);
+        break;
+      case "name":
+        filtered.sort((a, b) => a.customerName.localeCompare(b.customerName));
+        break;
+      case "oldest":
+      default:
+        filtered.sort((a, b) => a.oldestBillDate.getTime() - b.oldestBillDate.getTime());
+        break;
+    }
+
+    return filtered;
+  }, [consolidatedCustomers, filters]);
+
+  const hasActiveFilters = filters.search || filters.amountRange.min || filters.amountRange.max || filters.daysOverdue;
+
+  const clearFilters = () => {
+    setFilters({
+      search: "",
+      amountRange: { min: "", max: "" },
+      daysOverdue: "",
+      sortBy: "oldest"
+    });
+  };
 
   const [selectedCustomerPhone, setSelectedCustomerPhone] = useState<string | null>(null);
   const selectedCustomer = consolidatedCustomers.find(c => c.customerPhone === selectedCustomerPhone);
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-unpaid-bills-title">
-          Unpaid Bills
-        </h1>
-        <p className="text-sm text-muted-foreground">Track and manage outstanding payments</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-unpaid-bills-title">
+            Unpaid Bills
+          </h1>
+          <p className="text-sm text-muted-foreground">Track and manage outstanding payments</p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search customers..."
+              value={filters.search}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              className="pl-9 w-48 sm:w-64"
+            />
+          </div>
+
+          {/* Filter Dropdown */}
+          <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <Filter className="h-4 w-4" />
+                Filter
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 p-4">
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium mb-2">Filters</h4>
+                  
+                  {/* Amount Range */}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Amount Range</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Min"
+                        value={filters.amountRange.min}
+                        onChange={(e) => setFilters(prev => ({
+                          ...prev,
+                          amountRange: { ...prev.amountRange, min: e.target.value }
+                        }))}
+                        type="number"
+                      />
+                      <Input
+                        placeholder="Max"
+                        value={filters.amountRange.max}
+                        onChange={(e) => setFilters(prev => ({
+                          ...prev,
+                          amountRange: { ...prev.amountRange, max: e.target.value }
+                        }))}
+                        type="number"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Days Overdue */}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Minimum Days Overdue</Label>
+                    <Input
+                      placeholder="e.g., 30"
+                      value={filters.daysOverdue}
+                      onChange={(e) => setFilters(prev => ({ ...prev, daysOverdue: e.target.value }))}
+                      type="number"
+                    />
+                  </div>
+
+                  {/* Sort By */}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Sort By</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        variant={filters.sortBy === "oldest" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFilters(prev => ({ ...prev, sortBy: "oldest" }))}
+                      >
+                        Oldest First
+                      </Button>
+                      <Button
+                        variant={filters.sortBy === "newest" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFilters(prev => ({ ...prev, sortBy: "newest" }))}
+                      >
+                        Newest First
+                      </Button>
+                      <Button
+                        variant={filters.sortBy === "highest" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFilters(prev => ({ ...prev, sortBy: "highest" }))}
+                      >
+                        Highest Amount
+                      </Button>
+                      <Button
+                        variant={filters.sortBy === "lowest" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setFilters(prev => ({ ...prev, sortBy: "lowest" }))}
+                      >
+                        Lowest Amount
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Clear Filters */}
+                  {hasActiveFilters && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
+                      className="w-full mt-2"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Clear Filters
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Filter Summary */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <Filter className="h-3 w-3" />
+            Filters Applied
+          </Badge>
+          {filters.search && (
+            <Badge variant="outline">
+              Search: "{filters.search}"
+            </Badge>
+          )}
+          {filters.amountRange.min && (
+            <Badge variant="outline">
+              Min: Rs. {parseFloat(filters.amountRange.min).toLocaleString()}
+            </Badge>
+          )}
+          {filters.amountRange.max && (
+            <Badge variant="outline">
+              Max: Rs. {parseFloat(filters.amountRange.max).toLocaleString()}
+            </Badge>
+          )}
+          {filters.daysOverdue && (
+            <Badge variant="outline">
+              {filters.daysOverdue}+ Days Overdue
+            </Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="ml-auto h-6 px-2"
+          >
+            <X className="h-3 w-3 mr-1" />
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Results Count */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredAndSortedCustomers.length} of {consolidatedCustomers.length} customers
+        </p>
+        {hasActiveFilters && (
+          <p className="text-sm text-muted-foreground">
+            Total Outstanding: Rs. {Math.round(filteredAndSortedCustomers.reduce((sum, customer) => sum + customer.totalOutstanding, 0)).toLocaleString()}
+          </p>
+        )}
       </div>
 
       {isLoading ? (
@@ -346,19 +621,26 @@ export default function UnpaidBills() {
             </Card>
           ))}
         </div>
-      ) : consolidatedCustomers.length === 0 ? (
+      ) : filteredAndSortedCustomers.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <CreditCard className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium mb-1">No unpaid bills</h3>
-            <p className="text-sm text-muted-foreground">All payments are up to date</p>
+            <h3 className="text-lg font-medium mb-1">
+              {hasActiveFilters ? "No customers match your filters" : "No unpaid bills"}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {hasActiveFilters ? "Try adjusting your filters" : "All payments are up to date"}
+            </p>
+            {hasActiveFilters && (
+              <Button variant="outline" onClick={clearFilters} className="mt-4">
+                Clear Filters
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {consolidatedCustomers.map((customer) => {
-            const daysOverdue = getDaysOverdue(customer.oldestBillDate);
-
+          {filteredAndSortedCustomers.map((customer) => {
             return (
               <Card key={customer.customerPhone} className="hover-elevate" data-testid={`unpaid-bill-customer-${customer.customerPhone}`}>
                 <CardHeader className="pb-3">
@@ -378,8 +660,11 @@ export default function UnpaidBills() {
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Calendar className="h-4 w-4" />
                       <span>{customer.oldestBillDate.toLocaleDateString()}</span>
-                      <Badge variant="secondary" className="ml-auto">
-                        {daysOverdue} days ago
+                      <Badge 
+                        variant={customer.daysOverdue > 30 ? "destructive" : "secondary"} 
+                        className="ml-auto"
+                      >
+                        {customer.daysOverdue} days ago
                       </Badge>
                     </div>
                   </div>
