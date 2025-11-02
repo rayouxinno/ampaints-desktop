@@ -13,13 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -27,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CreditCard, Calendar, User, Phone, Plus, Trash2, Eye, Search, Banknote, Printer, Receipt, Filter } from "lucide-react";
+import { CreditCard, Calendar, User, Phone, Plus, Trash2, Eye, Search, Banknote, Printer, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Sale, SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
@@ -50,9 +43,6 @@ export default function UnpaidBills() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>("all");
-  const [amountFilter, setAmountFilter] = useState<string>("all");
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
   const [quantity, setQuantity] = useState("1");
   const { toast } = useToast();
@@ -334,52 +324,6 @@ export default function UnpaidBills() {
     });
   }, [unpaidSales]);
 
-  // FILTERED CUSTOMERS WITH ALL FILTERS
-  const filteredCustomers = useMemo(() => {
-    return consolidatedCustomers.filter(customer => {
-      // Search filter
-      const matchesSearch = 
-        customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customer.customerPhone.includes(searchQuery);
-      
-      // Status filter
-      let matchesStatus = true;
-      if (statusFilter === "overdue") {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        matchesStatus = customer.oldestBillDate < thirtyDaysAgo;
-      } else if (statusFilter === "recent") {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        matchesStatus = customer.oldestBillDate >= sevenDaysAgo;
-      }
-
-      // Date filter
-      let matchesDate = true;
-      if (dateFilter === "week") {
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        matchesDate = customer.oldestBillDate >= weekAgo;
-      } else if (dateFilter === "month") {
-        const monthAgo = new Date();
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        matchesDate = customer.oldestBillDate >= monthAgo;
-      }
-
-      // Amount filter
-      let matchesAmount = true;
-      if (amountFilter === "small") {
-        matchesAmount = customer.totalOutstanding <= 1000;
-      } else if (amountFilter === "medium") {
-        matchesAmount = customer.totalOutstanding > 1000 && customer.totalOutstanding <= 5000;
-      } else if (amountFilter === "large") {
-        matchesAmount = customer.totalOutstanding > 5000;
-      }
-
-      return matchesSearch && matchesStatus && matchesDate && matchesAmount;
-    });
-  }, [consolidatedCustomers, searchQuery, statusFilter, dateFilter, amountFilter]);
-
   const [selectedCustomerPhone, setSelectedCustomerPhone] = useState<string | null>(null);
   const selectedCustomer = consolidatedCustomers.find(c => c.customerPhone === selectedCustomerPhone);
 
@@ -392,97 +336,6 @@ export default function UnpaidBills() {
         <p className="text-sm text-muted-foreground">Track and manage outstanding payments</p>
       </div>
 
-      {/* FILTERS SECTION - ADDED */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            Filters
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by customer name or phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              data-testid="input-search-customers"
-              className="pl-9"
-            />
-          </div>
-
-          {/* Filter Dropdowns */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger data-testid="select-status-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="overdue">Overdue (30+ days)</SelectItem>
-                  <SelectItem value="recent">Recent (7 days)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Date Range</label>
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger data-testid="select-date-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Dates</SelectItem>
-                  <SelectItem value="week">Last 7 Days</SelectItem>
-                  <SelectItem value="month">Last 30 Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">Amount Range</label>
-              <Select value={amountFilter} onValueChange={setAmountFilter}>
-                <SelectTrigger data-testid="select-amount-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Amounts</SelectItem>
-                  <SelectItem value="small">Small (&lt; 1K)</SelectItem>
-                  <SelectItem value="medium">Medium (1K-5K)</SelectItem>
-                  <SelectItem value="large">Large (&gt; 5K)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Results Count and Clear Filters */}
-          {(searchQuery || statusFilter !== "all" || dateFilter !== "all" || amountFilter !== "all") && (
-            <div className="flex items-center justify-between text-sm">
-              <p className="text-muted-foreground">
-                Showing {filteredCustomers.length} of {consolidatedCustomers.length} customers
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                  setDateFilter("all");
-                  setAmountFilter("all");
-                }}
-                data-testid="button-clear-filters"
-              >
-                Clear Filters
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -493,24 +346,17 @@ export default function UnpaidBills() {
             </Card>
           ))}
         </div>
-      ) : filteredCustomers.length === 0 ? (
+      ) : consolidatedCustomers.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <CreditCard className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium mb-1">
-              {consolidatedCustomers.length === 0 ? "No unpaid bills" : "No results found"}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {consolidatedCustomers.length === 0 
-                ? "All payments are up to date"
-                : "Try adjusting your filters"
-              }
-            </p>
+            <h3 className="text-lg font-medium mb-1">No unpaid bills</h3>
+            <p className="text-sm text-muted-foreground">All payments are up to date</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredCustomers.map((customer) => {
+          {consolidatedCustomers.map((customer) => {
             const daysOverdue = getDaysOverdue(customer.oldestBillDate);
 
             return (
@@ -522,7 +368,7 @@ export default function UnpaidBills() {
                       <Badge variant="secondary">{customer.bills.length} Bills</Badge>
                     )}
                   </div>
-                </CardContent>
+                </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2 text-muted-foreground">
