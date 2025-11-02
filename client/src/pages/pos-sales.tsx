@@ -25,6 +25,7 @@ import {
   Phone,
   Calendar,
   Zap,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -170,27 +171,27 @@ export default function POSSales() {
   ) => {
     const effectiveRate = rate ?? parseFloat(color.variant.rate);
     
-    // Check stock availability
+    // REMOVED STOCK VALIDATION - Allow adding even when stock is 0
+    // Only show warning but don't prevent adding to cart
     if (qty > color.stockQuantity) {
       toast({ 
-        title: "Insufficient stock", 
-        description: `Only ${color.stockQuantity} units available`,
-        variant: "destructive" 
+        title: "Low Stock Warning", 
+        description: `Only ${color.stockQuantity} units available in stock, but you can still proceed with the sale.`,
+        variant: "default" 
       });
-      return;
     }
 
     setCart((prev) => {
       const existing = prev.find((p) => p.colorId === color.id);
       if (existing) {
         const newQuantity = existing.quantity + qty;
+        // Show warning but allow adding
         if (newQuantity > color.stockQuantity) {
           toast({ 
-            title: "Insufficient stock", 
-            description: `Only ${color.stockQuantity} units available`,
-            variant: "destructive" 
+            title: "Low Stock Warning", 
+            description: `Only ${color.stockQuantity} units available in stock, but you can still proceed with the sale.`,
+            variant: "default" 
           });
-          return prev;
         }
         return prev.map((p) =>
           p.colorId === color.id
@@ -217,13 +218,14 @@ export default function POSSales() {
     if (!selectedColor) return;
     const qty = Math.max(1, Math.floor(confirmQty));
     
+    // REMOVED STOCK VALIDATION - Allow adding even when stock is 0
+    // Only show warning but don't prevent adding to cart
     if (qty > selectedColor.stockQuantity) {
       toast({ 
-        title: "Insufficient stock", 
-        description: `Only ${selectedColor.stockQuantity} units available`,
-        variant: "destructive" 
+        title: "Low Stock Warning", 
+        description: `Only ${selectedColor.stockQuantity} units available in stock, but you can still proceed with the sale.`,
+        variant: "default" 
       });
-      return;
     }
 
     const r = Number(confirmRate) || parseFloat(selectedColor.variant.rate);
@@ -239,13 +241,13 @@ export default function POSSales() {
       prev.map((it) => {
         if (it.colorId === id) {
           const newQuantity = Math.max(1, it.quantity + delta);
+          // Show warning but allow updating
           if (newQuantity > it.color.stockQuantity) {
             toast({ 
-              title: "Insufficient stock", 
-              description: `Only ${it.color.stockQuantity} units available`,
-              variant: "destructive" 
+              title: "Low Stock Warning", 
+              description: `Only ${it.color.stockQuantity} units available in stock, but you can still proceed with the sale.`,
+              variant: "default" 
             });
-            return it;
           }
           return { ...it, quantity: newQuantity };
         }
@@ -268,6 +270,18 @@ export default function POSSales() {
     if (cart.length === 0) {
       toast({ title: "Cart is empty", variant: "destructive" });
       return;
+    }
+
+    // Check for low stock items and show warning
+    const lowStockItems = cart.filter(item => item.quantity > item.color.stockQuantity);
+    if (lowStockItems.length > 0) {
+      const lowStockNames = lowStockItems.map(item => item.color.colorName).join(', ');
+      toast({
+        title: "Low Stock Items",
+        description: `The following items have insufficient stock: ${lowStockNames}. You can still proceed with the sale.`,
+        variant: "default",
+        duration: 5000,
+      });
     }
 
     const paid = isPaid ? total : paidAmount;
@@ -295,14 +309,26 @@ export default function POSSales() {
     setCustomerSuggestionsOpen(false);
   };
 
-  const StockQuantity = ({ stock }: { stock: number }) => {
-    if (stock <= 0) {
+  const StockQuantity = ({ stock, required = 0 }: { stock: number; required?: number }) => {
+    const isOutOfStock = stock <= 0;
+    const isLowStock = stock > 0 && stock <= 10;
+    const hasInsufficientStock = required > stock;
+
+    if (isOutOfStock) {
       return (
         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs px-2 py-1">
+          <AlertTriangle className="h-3 w-3 mr-1" />
           Out of Stock
         </Badge>
       );
-    } else if (stock <= 10) {
+    } else if (hasInsufficientStock) {
+      return (
+        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs px-2 py-1">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Low: {stock} (Need: {required})
+        </Badge>
+      );
+    } else if (isLowStock) {
       return (
         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs px-2 py-1">
           Low: {stock}
@@ -421,7 +447,7 @@ export default function POSSales() {
                               <div className="text-sm text-gray-700">
                                 {it.color.colorName}
                               </div>
-                              <StockQuantity stock={it.color.stockQuantity - it.quantity} />
+                              <StockQuantity stock={it.color.stockQuantity} required={it.quantity} />
                             </div>
                           </div>
 
@@ -757,6 +783,14 @@ export default function POSSales() {
                     <StockQuantity stock={selectedColor.stockQuantity} />
                   </span>
                 </div>
+                {selectedColor.stockQuantity === 0 && (
+                  <div className="p-2 bg-orange-50 border border-orange-200 rounded-md">
+                    <p className="text-xs text-orange-700 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      This item is out of stock, but you can still add it to the sale.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             <div className="space-y-3">
@@ -765,7 +799,6 @@ export default function POSSales() {
                 <Input
                   type="number"
                   min="1"
-                  max={selectedColor?.stockQuantity}
                   value={confirmQty}
                   onChange={(e) => setConfirmQty(parseInt(e.target.value) || 1)}
                   className="h-11 text-center text-lg font-medium border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
