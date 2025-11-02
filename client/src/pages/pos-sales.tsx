@@ -391,99 +391,103 @@ export default function POSSales() {
           </div>
         </div>
 
-        {/* Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Cart */}
-          <div className="lg:col-span-2 space-y-6">
+        {/* Layout - Updated with fixed sidebar */}
+        <div className="flex gap-6">
+          {/* Main Content - Product Cards */}
+          <div className="flex-1">
             <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
               <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg border-b-0">
                 <CardTitle className="flex items-center gap-3 text-lg font-semibold">
-                  <ShoppingCart className="h-6 w-6" /> 
-                  Shopping Cart ({cart.length})
+                  <Package2 className="h-6 w-6" /> 
+                  Available Products ({colors.length})
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0 bg-white rounded-b-lg">
-                {cart.length === 0 ? (
-                  <div className="py-16 text-center text-gray-500 bg-gradient-to-b from-white to-gray-50 rounded-b-lg">
-                    <Package2 className="mx-auto mb-4 h-16 w-16 opacity-30" />
-                    <p className="text-lg font-medium text-gray-400">Your cart is empty</p>
-                    <p className="text-sm text-gray-400 mt-2">Add products to get started</p>
+              <CardContent className="p-6 bg-white rounded-b-lg">
+                {isLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {Array.from({ length: 9 }).map((_, i) => (
+                      <Card key={i} className="border-0 shadow-sm bg-white">
+                        <CardContent className="p-4">
+                          <Skeleton className="h-6 w-3/4 mb-3" />
+                          <Skeleton className="h-4 w-1/2 mb-2" />
+                          <Skeleton className="h-4 w-2/3 mb-4" />
+                          <div className="flex justify-between items-center">
+                            <Skeleton className="h-8 w-20" />
+                            <Skeleton className="h-10 w-24" />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : colors.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Package2 className="mx-auto h-16 w-16 text-gray-300 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No products available</h3>
+                    <p className="text-gray-500">Add products to your inventory to get started</p>
                   </div>
                 ) : (
-                  <div className="flex flex-col divide-y divide-gray-100">
-                    {cart.map((it) => (
-                      <div
-                        key={it.colorId}
-                        className="p-5 hover:bg-gray-50 transition-colors duration-200"
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {colors.map((color) => (
+                      <Card 
+                        key={color.id} 
+                        className="border-0 shadow-sm bg-white hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden border-l-4 border-l-blue-500"
+                        onClick={() => openConfirmFor(color)}
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-4 mb-3">
-                              <div className="min-w-0">
-                                <div className="text-base font-semibold text-gray-900 truncate">
-                                  {it.color.variant.product.company}
+                        <CardContent className="p-5">
+                          <div className="space-y-4">
+                            {/* Header */}
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-blue-600 truncate mb-1">
+                                  {color.variant.product.company}
                                 </div>
-                                <div className="text-sm text-gray-600 truncate mt-1">
-                                  {it.color.variant.product.productName}
+                                <div className="text-base font-bold text-gray-900 truncate">
+                                  {color.variant.product.productName}
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <div className="text-base font-bold text-blue-600">
-                                  Rs. {Math.round(it.quantity * it.rate)}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  Rs. {Math.round(it.rate)} each
-                                </div>
+                              <StockQuantity stock={color.stockQuantity} />
+                            </div>
+
+                            {/* Color Info */}
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <div 
+                                  className="w-6 h-6 rounded border border-gray-300 shadow-sm" 
+                                  style={{ backgroundColor: color.colorCode }} 
+                                />
+                                <span className="text-sm font-mono text-gray-600 font-medium">
+                                  {color.colorCode}
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-700 line-clamp-2">
+                                {color.colorName}
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap gap-2 items-center">
-                              <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs font-mono px-2 py-1">
-                                {it.color.colorCode}
+                            {/* Details */}
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="secondary" className="bg-blue-50 text-blue-700 text-xs px-2 py-1 border border-blue-200">
+                                {color.variant.packingSize}
                               </Badge>
-                              <Badge variant="outline" className="text-xs px-2 py-1 border-gray-300">
-                                {it.color.variant.packingSize}
+                              <Badge variant="secondary" className="bg-purple-50 text-purple-700 text-xs px-2 py-1 border border-purple-200">
+                                Rs. {Math.round(parseFloat(color.variant.rate))}
                               </Badge>
-                              <div className="text-sm text-gray-700">
-                                {it.color.colorName}
-                              </div>
-                              <StockQuantity stock={it.color.stockQuantity} required={it.quantity} />
                             </div>
-                          </div>
 
-                          <div className="flex flex-col items-end gap-3">
-                            <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 hover:bg-white"
-                                onClick={() => updateQuantity(it.colorId, -1)}
-                              >
-                                <Minus className="h-3 w-3" />
-                              </Button>
-                              <div className="w-8 text-center text-sm font-medium">
-                                {it.quantity}
-                              </div>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 hover:bg-white"
-                                onClick={() => updateQuantity(it.colorId, 1)}
-                              >
-                                <Plus className="h-3 w-3" />
-                              </Button>
-                            </div>
+                            {/* Action Button - Updated to match theme */}
                             <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-600"
-                              onClick={() => removeFromCart(it.colorId)}
+                              className="w-full h-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium transition-all duration-200 group-hover:scale-105 shadow-md"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToCart(color);
+                              }}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add to Cart
                             </Button>
                           </div>
-                        </div>
-                      </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 )}
@@ -491,142 +495,231 @@ export default function POSSales() {
             </Card>
           </div>
 
-          {/* Right Side */}
-          <div className="space-y-6">
-            <Card className="sticky top-6 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
-              <CardHeader className="border-b border-gray-100">
-                <CardTitle className="text-lg font-semibold text-gray-900">Customer Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 pt-6">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Name</Label>
-                  <Popover open={customerSuggestionsOpen} onOpenChange={setCustomerSuggestionsOpen}>
-                    <PopoverTrigger asChild>
-                      <div className="relative">
-                        <Input
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          className="h-11 pr-12 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Type or select customer"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-11 px-3 hover:bg-gray-100"
-                          onClick={() => setCustomerSuggestionsOpen(true)}
+          {/* Right Sidebar - Fixed Position */}
+          <div className="w-96 flex-shrink-0">
+            <div className="space-y-6 sticky top-6">
+              {/* Cart Section */}
+              <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+                <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg border-b-0">
+                  <CardTitle className="flex items-center gap-3 text-lg font-semibold">
+                    <ShoppingCart className="h-6 w-6" /> 
+                    Shopping Cart ({cart.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 bg-white rounded-b-lg max-h-[400px] overflow-y-auto">
+                  {cart.length === 0 ? (
+                    <div className="py-12 text-center text-gray-500 bg-gradient-to-b from-white to-gray-50 rounded-b-lg">
+                      <ShoppingCart className="mx-auto mb-4 h-12 w-12 opacity-30" />
+                      <p className="text-lg font-medium text-gray-400">Your cart is empty</p>
+                      <p className="text-sm text-gray-400 mt-2">Add products to get started</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col divide-y divide-gray-100">
+                      {cart.map((it) => (
+                        <div
+                          key={it.colorId}
+                          className="p-4 hover:bg-gray-50 transition-colors duration-200"
                         >
-                          <User className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-96 p-0 border-gray-300 shadow-xl" align="start">
-                      <Command>
-                        <CommandInput placeholder="Search customers..." className="h-11" />
-                        <CommandList className="max-h-64">
-                          <CommandEmpty className="py-8 text-center text-gray-500">
-                            <User className="mx-auto h-8 w-8 mb-2 opacity-40" />
-                            <p>No customers found</p>
-                          </CommandEmpty>
-                          <CommandGroup>
-                            {customerSuggestions.map((customer) => (
-                              <CommandItem
-                                key={customer.customerPhone}
-                                onSelect={() => selectCustomer(customer)}
-                                className="flex flex-col items-start gap-2 py-3 px-4 cursor-pointer hover:bg-gray-50"
-                              >
-                                <div className="flex items-center gap-2 w-full">
-                                  <User className="h-4 w-4 text-blue-500" />
-                                  <span className="font-medium text-gray-900">{customer.customerName}</span>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="mb-2">
+                                <div className="text-sm font-semibold text-gray-900 truncate">
+                                  {it.color.variant.product.company}
                                 </div>
-                                <div className="flex items-center gap-4 text-xs text-gray-500 w-full pl-6">
-                                  <div className="flex items-center gap-1">
-                                    <Phone className="h-3 w-3" />
-                                    {customer.customerPhone}
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    {new Date(customer.lastSaleDate).toLocaleDateString()}
-                                  </div>
-                                  <div className="text-green-600 font-medium">
-                                    Rs. {Math.round(customer.totalSpent).toLocaleString()}
-                                  </div>
+                                <div className="text-xs text-gray-600 truncate">
+                                  {it.color.variant.product.productName}
                                 </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Phone</Label>
-                  <Input
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="h-11 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-gray-700">Amount Paid (optional)</Label>
-                  <Input
-                    type="number"
-                    value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    className="h-11 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+                              </div>
 
-                <div className="pt-4 border-t border-gray-200 space-y-3">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Subtotal</span>
-                    <span className="font-medium">Rs. {Math.round(subtotal)}</span>
-                  </div>
-                  {enableGST && (
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>GST (18%)</span>
-                      <span className="font-medium">Rs. {Math.round(tax)}</span>
+                              <div className="flex flex-wrap gap-1 items-center">
+                                <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs font-mono px-2 py-0.5">
+                                  {it.color.colorCode}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs px-2 py-0.5 border-gray-300">
+                                  {it.color.variant.packingSize}
+                                </Badge>
+                                <div className="text-xs text-gray-700">
+                                  {it.color.colorName}
+                                </div>
+                                <StockQuantity stock={it.color.stockQuantity} required={it.quantity} />
+                              </div>
+                              
+                              <div className="mt-2 text-sm font-mono text-blue-600">
+                                Rs. {Math.round(it.quantity * it.rate)}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 hover:bg-white"
+                                  onClick={() => updateQuantity(it.colorId, -1)}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <div className="w-6 text-center text-sm font-medium">
+                                  {it.quantity}
+                                </div>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 hover:bg-white"
+                                  onClick={() => updateQuantity(it.colorId, 1)}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-red-500 hover:bg-red-50 hover:text-red-600"
+                                onClick={() => removeFromCart(it.colorId)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-                    <span className="text-gray-900">Total</span>
-                    <span className="text-blue-600">
-                      Rs. {Math.round(total)}
-                    </span>
+                </CardContent>
+              </Card>
+
+              {/* Customer & Payment Section */}
+              <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+                <CardHeader className="border-b border-gray-100">
+                  <CardTitle className="text-lg font-semibold text-gray-900">Customer Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-6">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">Name</Label>
+                    <Popover open={customerSuggestionsOpen} onOpenChange={setCustomerSuggestionsOpen}>
+                      <PopoverTrigger asChild>
+                        <div className="relative">
+                          <Input
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            className="h-10 pr-10 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Type or select customer"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-10 px-3 hover:bg-gray-100"
+                            onClick={() => setCustomerSuggestionsOpen(true)}
+                          >
+                            <User className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0 border-gray-300 shadow-xl" align="end">
+                        <Command>
+                          <CommandInput placeholder="Search customers..." className="h-9" />
+                          <CommandList className="max-h-64">
+                            <CommandEmpty className="py-6 text-center text-gray-500">
+                              <User className="mx-auto h-6 w-6 mb-2 opacity-40" />
+                              <p>No customers found</p>
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {customerSuggestions.map((customer) => (
+                                <CommandItem
+                                  key={customer.customerPhone}
+                                  onSelect={() => selectCustomer(customer)}
+                                  className="flex flex-col items-start gap-1 py-2 px-3 cursor-pointer hover:bg-gray-50"
+                                >
+                                  <div className="flex items-center gap-2 w-full">
+                                    <User className="h-3 w-3 text-blue-500" />
+                                    <span className="font-medium text-gray-900 text-sm">{customer.customerName}</span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-gray-500 w-full pl-5">
+                                    <div className="flex items-center gap-1">
+                                      <Phone className="h-3 w-3" />
+                                      {customer.customerPhone}
+                                    </div>
+                                    <div className="text-green-600 font-medium">
+                                      Rs. {Math.round(customer.totalSpent).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">Phone</Label>
+                    <Input
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      className="h-10 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-gray-700">Amount Paid (optional)</Label>
+                    <Input
+                      type="number"
+                      value={amountPaid}
+                      onChange={(e) => setAmountPaid(e.target.value)}
+                      className="h-10 border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
                   </div>
 
-                  {paidAmount > 0 && (
-                    <div className="flex justify-between text-sm font-medium pt-2">
-                      <span className="text-gray-700">Remaining</span>
-                      <span className={remainingBalance > 0 ? "text-orange-600" : "text-green-600"}>
-                        Rs. {Math.round(remainingBalance)}
+                  <div className="pt-4 border-t border-gray-200 space-y-3">
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Subtotal</span>
+                      <span className="font-medium">Rs. {Math.round(subtotal)}</span>
+                    </div>
+                    {enableGST && (
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>GST (18%)</span>
+                        <span className="font-medium">Rs. {Math.round(tax)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
+                      <span className="text-gray-900">Total</span>
+                      <span className="text-blue-600">
+                        Rs. {Math.round(total)}
                       </span>
                     </div>
-                  )}
-                </div>
 
-                <div className="space-y-3 pt-4">
-                  <Button
-                    className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg transition-all duration-200"
-                    onClick={() => handleCompleteSale(true)}
-                    disabled={createSaleMutation.isLoading || cart.length === 0}
-                  >
-                    {createSaleMutation.isLoading ? "Processing..." : "Complete Sale (Ctrl+P)"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full h-12 border-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300 font-semibold transition-all duration-200"
-                    onClick={() => handleCompleteSale(false)}
-                    disabled={createSaleMutation.isLoading || cart.length === 0}
-                  >
-                    Create Bill (Ctrl+B)
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                    {paidAmount > 0 && (
+                      <div className="flex justify-between text-sm font-medium pt-2">
+                        <span className="text-gray-700">Remaining</span>
+                        <span className={remainingBalance > 0 ? "text-orange-600" : "text-green-600"}>
+                          Rs. {Math.round(remainingBalance)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-4">
+                    <Button
+                      className="w-full h-11 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg transition-all duration-200"
+                      onClick={() => handleCompleteSale(true)}
+                      disabled={createSaleMutation.isLoading || cart.length === 0}
+                    >
+                      {createSaleMutation.isLoading ? "Processing..." : "Complete Sale (Ctrl+P)"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full h-11 border-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-300 font-semibold transition-all duration-200"
+                      onClick={() => handleCompleteSale(false)}
+                      disabled={createSaleMutation.isLoading || cart.length === 0}
+                    >
+                      Create Bill (Ctrl+B)
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>
@@ -659,7 +752,7 @@ export default function POSSales() {
             className="flex-1 overflow-y-auto p-6 bg-gray-50"
           >
             {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <Card key={i} className="border-0 shadow-sm bg-white">
                     <CardContent className="p-4">
@@ -681,11 +774,11 @@ export default function POSSales() {
                 <p className="text-gray-500">Try adjusting your search terms</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredColors.map((color) => (
                   <Card 
                     key={color.id} 
-                    className="border-0 shadow-sm bg-white hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden"
+                    className="border-0 shadow-sm bg-white hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden border-l-4 border-l-blue-500"
                     onClick={() => openConfirmFor(color)}
                   >
                     <CardContent className="p-5">
@@ -706,8 +799,10 @@ export default function POSSales() {
                         {/* Color Info */}
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded border border-gray-300" 
-                                 style={{ backgroundColor: color.colorCode }} />
+                            <div 
+                              className="w-6 h-6 rounded border border-gray-300 shadow-sm" 
+                              style={{ backgroundColor: color.colorCode }} 
+                            />
                             <span className="text-sm font-mono text-gray-600 font-medium">
                               {color.colorCode}
                             </span>
@@ -719,17 +814,17 @@ export default function POSSales() {
 
                         {/* Details */}
                         <div className="flex flex-wrap gap-2">
-                          <Badge variant="secondary" className="bg-gray-100 text-gray-700 text-xs px-2 py-1">
+                          <Badge variant="secondary" className="bg-blue-50 text-blue-700 text-xs px-2 py-1 border border-blue-200">
                             {color.variant.packingSize}
                           </Badge>
-                          <Badge variant="secondary" className="bg-green-50 text-green-700 text-xs px-2 py-1">
+                          <Badge variant="secondary" className="bg-purple-50 text-purple-700 text-xs px-2 py-1 border border-purple-200">
                             Rs. {Math.round(parseFloat(color.variant.rate))}
                           </Badge>
                         </div>
 
-                        {/* Action Button */}
+                        {/* Action Button - Updated to match theme */}
                         <Button
-                          className="w-full h-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium transition-all duration-200 group-hover:scale-105"
+                          className="w-full h-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium transition-all duration-200 group-hover:scale-105 shadow-md"
                           onClick={(e) => {
                             e.stopPropagation();
                             addToCart(color);
@@ -763,8 +858,10 @@ export default function POSSales() {
             {selectedColor && (
               <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded border border-gray-300" 
-                       style={{ backgroundColor: selectedColor.colorCode }} />
+                  <div 
+                    className="w-6 h-6 rounded border border-gray-300 shadow-sm" 
+                    style={{ backgroundColor: selectedColor.colorCode }} 
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-gray-900 truncate">
                       {selectedColor.variant.product.company}
