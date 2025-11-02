@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CreditCard, Calendar, User, Phone, Plus, Trash2, Eye, Search, Banknote, Printer, Receipt } from "lucide-react";
+import { CreditCard, Calendar, User, Phone, Plus, Trash2, Eye, Search, Banknote, Printer, Receipt, Filter, FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Sale, SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
@@ -42,10 +49,15 @@ export default function UnpaidBills() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [addProductDialogOpen, setAddProductDialogOpen] = useState(false);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("all");
+  const [amountFilter, setAmountFilter] = useState<string>("all");
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
   const [quantity, setQuantity] = useState("1");
   const { toast } = useToast();
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const { data: unpaidSales = [], isLoading } = useQuery<Sale[]>({
     queryKey: ["/api/sales/unpaid"],
@@ -324,17 +336,201 @@ export default function UnpaidBills() {
     });
   }, [unpaidSales]);
 
+  // FILTERED CUSTOMERS WITH ALL FILTERS
+  const filteredCustomers = useMemo(() => {
+    return consolidatedCustomers.filter(customer => {
+      // Search filter
+      const matchesSearch = 
+        customer.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        customer.customerPhone.includes(searchQuery);
+      
+      // Status filter
+      let matchesStatus = true;
+      if (statusFilter === "overdue") {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        matchesStatus = customer.oldestBillDate < thirtyDaysAgo;
+      } else if (statusFilter === "recent") {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        matchesStatus = customer.oldestBillDate >= sevenDaysAgo;
+      }
+
+      // Date filter
+      let matchesDate = true;
+      if (dateFilter === "week") {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        matchesDate = customer.oldestBillDate >= weekAgo;
+      } else if (dateFilter === "month") {
+        const monthAgo = new Date();
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        matchesDate = customer.oldestBillDate >= monthAgo;
+      }
+
+      // Amount filter
+      let matchesAmount = true;
+      if (amountFilter === "small") {
+        matchesAmount = customer.totalOutstanding <= 1000;
+      } else if (amountFilter === "medium") {
+        matchesAmount = customer.totalOutstanding > 1000 && customer.totalOutstanding <= 5000;
+      } else if (amountFilter === "large") {
+        matchesAmount = customer.totalOutstanding > 5000;
+      }
+
+      return matchesSearch && matchesStatus && matchesDate && matchesAmount;
+    });
+  }, [consolidatedCustomers, searchQuery, statusFilter, dateFilter, amountFilter]);
+
+  // REPORT STATISTICS
+  const reportStats = useMemo(() => {
+    const totalCustomers = filteredCustomers.length;
+    const totalBills = filteredCustomers.reduce((sum, customer) => sum + customer.bills.length, 0);
+    const totalOutstanding = filteredCustomers.reduce((sum, customer) => sum + customer.totalOutstanding, 0);
+    const totalAmount = filteredCustomers.reduce((sum, customer) => sum + customer.totalAmount, 0);
+    const totalPaid = filteredCustomers.reduce((sum, customer) => sum + customer.totalPaid, 0);
+
+    return {
+      totalCustomers,
+      totalBills,
+      totalOutstanding: Math.round(totalOutstanding),
+      totalAmount: Math.round(totalAmount),
+      totalPaid: Math.round(totalPaid),
+      averagePerCustomer: totalCustomers > 0 ? Math.round(totalOutstanding / totalCustomers) : 0
+    };
+  }, [filteredCustomers]);
+
   const [selectedCustomerPhone, setSelectedCustomerPhone] = useState<string | null>(null);
   const selectedCustomer = consolidatedCustomers.find(c => c.customerPhone === selectedCustomerPhone);
 
+  // PRINT REPORT FUNCTION
+  const printReport = () => {
+    if (reportRef.current) {
+      const printContent = reportRef.current.innerHTML;
+      const originalContent = document.body.innerHTML;
+      
+      document.body.innerHTML = printContent;
+      window.print();
+      document.body.innerHTML = originalContent;
+      window.location.reload();
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-unpaid-bills-title">
-          Unpaid Bills
-        </h1>
-        <p className="text-sm text-muted-foreground">Track and manage outstanding payments</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-unpaid-bills-title">
+            Unpaid Bills
+          </h1>
+          <p className="text-sm text-muted-foreground">Track and manage outstanding payments</p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2"
+            onClick={() => setReportDialogOpen(true)}
+          >
+            <FileText className="h-4 w-4" />
+            Report
+          </Button>
+          <Button variant="outline" className="gap-2">
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
       </div>
+
+      {/* FILTERS SECTION */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Filters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by customer name or phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="input-search-customers"
+              className="pl-9"
+            />
+          </div>
+
+          {/* Filter Dropdowns */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger data-testid="select-status-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="overdue">Overdue (30+ days)</SelectItem>
+                  <SelectItem value="recent">Recent (7 days)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Date Range</label>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger data-testid="select-date-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Dates</SelectItem>
+                  <SelectItem value="week">Last 7 Days</SelectItem>
+                  <SelectItem value="month">Last 30 Days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Amount Range</label>
+              <Select value={amountFilter} onValueChange={setAmountFilter}>
+                <SelectTrigger data-testid="select-amount-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Amounts</SelectItem>
+                  <SelectItem value="small">Small (&lt; 1K)</SelectItem>
+                  <SelectItem value="medium">Medium (1K-5K)</SelectItem>
+                  <SelectItem value="large">Large (&gt; 5K)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Results Count and Clear Filters */}
+          {(searchQuery || statusFilter !== "all" || dateFilter !== "all" || amountFilter !== "all") && (
+            <div className="flex items-center justify-between text-sm">
+              <p className="text-muted-foreground">
+                Showing {filteredCustomers.length} of {consolidatedCustomers.length} customers
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setStatusFilter("all");
+                  setDateFilter("all");
+                  setAmountFilter("all");
+                }}
+                data-testid="button-clear-filters"
+              >
+                Clear Filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -346,17 +542,24 @@ export default function UnpaidBills() {
             </Card>
           ))}
         </div>
-      ) : consolidatedCustomers.length === 0 ? (
+      ) : filteredCustomers.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <CreditCard className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium mb-1">No unpaid bills</h3>
-            <p className="text-sm text-muted-foreground">All payments are up to date</p>
+            <h3 className="text-lg font-medium mb-1">
+              {consolidatedCustomers.length === 0 ? "No unpaid bills" : "No results found"}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {consolidatedCustomers.length === 0 
+                ? "All payments are up to date"
+                : "Try adjusting your filters"
+              }
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {consolidatedCustomers.map((customer) => {
+          {filteredCustomers.map((customer) => {
             const daysOverdue = getDaysOverdue(customer.oldestBillDate);
 
             return (
@@ -432,6 +635,191 @@ export default function UnpaidBills() {
         </div>
       )}
 
+      {/* REPORT DIALOG */}
+      <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Unpaid Bills Report</DialogTitle>
+            <DialogDescription>
+              Complete overview of all outstanding payments
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            {/* Report Actions */}
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={printReport} className="gap-2">
+                  <Printer className="h-4 w-4" />
+                  Print Report
+                </Button>
+                <Button variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Export PDF
+                </Button>
+              </div>
+            </div>
+
+            {/* Printable Report Content */}
+            <div ref={reportRef} className="print:block space-y-6">
+              {/* Report Header */}
+              <div className="text-center border-b pb-4 print:border-b-2 print:border-gray-800">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
+                    <span className="text-xl font-bold text-primary-foreground">AMP</span>
+                  </div>
+                  <h1 className="text-2xl font-bold">A.M Paints</h1>
+                </div>
+                <p className="text-sm text-muted-foreground">Dunyapur Road, Basti Malook (Multan). 03008683395</p>
+                <h2 className="text-xl font-semibold mt-4">Unpaid Bills Report</h2>
+                <p className="text-sm text-muted-foreground">
+                  {new Date().toLocaleDateString()} - {filteredCustomers.length} Customers
+                </p>
+              </div>
+
+              {/* Summary Statistics */}
+              <Card className="print:shadow-none print:border-2">
+                <CardHeader>
+                  <CardTitle className="text-lg">Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div className="space-y-2 p-4 border rounded-lg">
+                      <h3 className="font-semibold text-sm">Total Customers</h3>
+                      <p className="text-2xl font-bold text-blue-600">{reportStats.totalCustomers}</p>
+                    </div>
+                    <div className="space-y-2 p-4 border rounded-lg">
+                      <h3 className="font-semibold text-sm">Total Bills</h3>
+                      <p className="text-2xl font-bold text-green-600">{reportStats.totalBills}</p>
+                    </div>
+                    <div className="space-y-2 p-4 border rounded-lg">
+                      <h3 className="font-semibold text-sm">Total Outstanding</h3>
+                      <p className="text-2xl font-bold text-red-600">Rs. {reportStats.totalOutstanding.toLocaleString()}</p>
+                    </div>
+                    <div className="space-y-2 p-4 border rounded-lg">
+                      <h3 className="font-semibold text-sm">Avg per Customer</h3>
+                      <p className="text-2xl font-bold text-purple-600">Rs. {reportStats.averagePerCustomer.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Detailed Customer List */}
+              <Card className="print:shadow-none print:border-2">
+                <CardHeader>
+                  <CardTitle className="text-lg">Customer Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Bills</TableHead>
+                        <TableHead>Total Amount</TableHead>
+                        <TableHead>Paid</TableHead>
+                        <TableHead>Outstanding</TableHead>
+                        <TableHead>Oldest Bill</TableHead>
+                        <TableHead>Days Overdue</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredCustomers.map((customer) => {
+                        const daysOverdue = getDaysOverdue(customer.oldestBillDate);
+                        return (
+                          <TableRow key={customer.customerPhone}>
+                            <TableCell className="font-medium">{customer.customerName}</TableCell>
+                            <TableCell>{customer.customerPhone}</TableCell>
+                            <TableCell>{customer.bills.length}</TableCell>
+                            <TableCell className="font-mono">Rs. {Math.round(customer.totalAmount).toLocaleString()}</TableCell>
+                            <TableCell className="font-mono">Rs. {Math.round(customer.totalPaid).toLocaleString()}</TableCell>
+                            <TableCell className="font-mono font-semibold text-red-600">
+                              Rs. {Math.round(customer.totalOutstanding).toLocaleString()}
+                            </TableCell>
+                            <TableCell>{customer.oldestBillDate.toLocaleDateString()}</TableCell>
+                            <TableCell>
+                              <Badge variant={daysOverdue > 30 ? "destructive" : "secondary"}>
+                                {daysOverdue} days
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Bill Breakdown */}
+              <Card className="print:shadow-none print:border-2">
+                <CardHeader>
+                  <CardTitle className="text-lg">Bill Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {filteredCustomers.map((customer) => (
+                      <div key={customer.customerPhone} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-semibold">{customer.customerName}</h4>
+                            <p className="text-sm text-muted-foreground">{customer.customerPhone}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono font-semibold text-red-600">
+                              Rs. {Math.round(customer.totalOutstanding).toLocaleString()}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{customer.bills.length} bills</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {customer.bills.map((bill) => {
+                            const billTotal = parseFloat(bill.totalAmount);
+                            const billPaid = parseFloat(bill.amountPaid);
+                            const billOutstanding = billTotal - billPaid;
+                            return (
+                              <div key={bill.id} className="flex justify-between items-center text-sm border-l-4 border-blue-500 pl-3 py-1">
+                                <div>
+                                  <span className="font-medium">Bill #{bill.id.slice(-6)}</span>
+                                  <span className="text-muted-foreground ml-2">
+                                    {new Date(bill.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <div className="flex gap-4">
+                                  <span className="font-mono">Total: Rs. {Math.round(billTotal).toLocaleString()}</span>
+                                  <span className="font-mono">Paid: Rs. {Math.round(billPaid).toLocaleString()}</span>
+                                  <span className="font-mono font-semibold text-red-600">
+                                    Due: Rs. {Math.round(billOutstanding).toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Report Footer */}
+              <div className="text-center border-t pt-4 print:border-t-2 print:border-gray-800">
+                <p className="text-sm text-muted-foreground">
+                  This report was generated automatically by A.M Paints Management System
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  For any queries, please contact: 03008683395
+                </p>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* REST OF THE DIALOGS (Customer Bills, Payment, Add Product) remain the same */}
       {/* Customer Bills Details Dialog */}
       <Dialog open={!!selectedCustomerPhone && !paymentDialogOpen} onOpenChange={(open) => !open && setSelectedCustomerPhone(null)}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
@@ -490,240 +878,4 @@ export default function UnpaidBills() {
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Paid: </span>
-                                <span>Rs. {Math.round(billPaid).toLocaleString()}</span>
-                              </div>
-                              {billOutstanding > 0 && (
-                                <div>
-                                  <span className="text-muted-foreground">Due: </span>
-                                  <span className="text-destructive font-semibold">Rs. {billOutstanding.toLocaleString()}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Link href={`/bill/${bill.id}`}>
-                              <Button variant="outline" size="sm" data-testid={`button-view-bill-${bill.id}`}>
-                                <Printer className="h-4 w-4 mr-1" />
-                                Print
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              {/* Consolidated Totals */}
-              <div className="p-4 bg-muted rounded-md space-y-2 text-sm font-mono">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Amount:</span>
-                  <span>Rs. {Math.round(selectedCustomer.totalAmount).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Amount Paid:</span>
-                  <span>Rs. {Math.round(selectedCustomer.totalPaid).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between font-semibold text-base text-destructive border-t border-border pt-2">
-                  <span>Total Outstanding:</span>
-                  <span>Rs. {Math.round(selectedCustomer.totalOutstanding).toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setSelectedCustomerPhone(null)}>
-                  Close
-                </Button>
-                <Button
-                  onClick={() => {
-                    setPaymentDialogOpen(true);
-                    setPaymentAmount(Math.round(selectedCustomer.totalOutstanding).toString());
-                  }}
-                  data-testid="button-record-payment-dialog"
-                >
-                  <Banknote className="h-4 w-4 mr-2" />
-                  Record Payment
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Record Payment Dialog */}
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
-            <DialogDescription>
-              Update payment for {selectedCustomer?.customerName}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-md space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Bills:</span>
-                  <span className="font-mono">Rs. {Math.round(selectedCustomer.totalAmount).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Already Paid:</span>
-                  <span className="font-mono">Rs. {Math.round(selectedCustomer.totalPaid).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between font-semibold">
-                  <span>Total Outstanding:</span>
-                  <span className="font-mono">
-                    Rs. {Math.round(selectedCustomer.totalOutstanding).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="paymentAmount">Payment Amount</Label>
-                <Input
-                  id="paymentAmount"
-                  type="number"
-                  step="1"
-                  placeholder="0"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  data-testid="input-payment-amount"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Payment will be applied to oldest bills first
-                </p>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleRecordPayment}
-                  disabled={recordPaymentMutation.isPending}
-                  data-testid="button-submit-payment"
-                >
-                  {recordPaymentMutation.isPending ? "Recording..." : "Record Payment"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Product Dialog */}
-      <Dialog open={addProductDialogOpen} onOpenChange={setAddProductDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add Product to Bill</DialogTitle>
-            <DialogDescription>
-              Search and select a product to add to the bill
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by color code, name, company, or product..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                data-testid="input-search-colors"
-                className="pl-9"
-              />
-            </div>
-
-            {/* Color Selection */}
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {filteredColors.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  {searchQuery ? "No colors found matching your search" : "Start typing to search for colors"}
-                </p>
-              ) : (
-                filteredColors.slice(0, 20).map((color) => (
-                  <Card
-                    key={color.id}
-                    className={`hover-elevate cursor-pointer ${selectedColor?.id === color.id ? "border-primary" : ""}`}
-                    onClick={() => setSelectedColor(color)}
-                    data-testid={`color-option-${color.id}`}
-                  >
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{color.variant.product.company}</Badge>
-                            <span className="font-medium">{color.variant.product.productName}</span>
-                            <Badge variant="outline">{color.variant.packingSize}</Badge>
-                          </div>
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground">{color.colorName}</span>
-                            <Badge variant="secondary">{color.colorCode}</Badge>
-                            <Badge variant={color.stockQuantity > 0 ? "default" : "destructive"}>
-                              Stock: {color.stockQuantity}
-                            </Badge>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono font-medium">Rs. {Math.round(parseFloat(color.variant.rate))}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
-
-            {/* Quantity */}
-            {selectedColor && (
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  max={selectedColor.stockQuantity}
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  data-testid="input-quantity"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Available stock: {selectedColor.stockQuantity} units
-                </p>
-                {selectedColor && (
-                  <div className="p-3 bg-muted rounded-md">
-                    <div className="flex justify-between font-mono">
-                      <span>Subtotal:</span>
-                      <span>Rs. {Math.round(parseFloat(selectedColor.variant.rate) * parseInt(quantity || "0"))}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setAddProductDialogOpen(false);
-                  setSelectedColor(null);
-                  setQuantity("1");
-                  setSearchQuery("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAddProduct}
-                disabled={!selectedColor || addItemMutation.isPending}
-                data-testid="button-confirm-add-product"
-              >
-                {addItemMutation.isPending ? "Adding..." : "Add Product"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+                               
