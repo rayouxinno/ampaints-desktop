@@ -44,7 +44,6 @@ export default function BillPrint() {
   const [editMode, setEditMode] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
-  const [thermalViewOpen, setThermalViewOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [searchQuery, setSearchQuery] = useState("");
@@ -155,10 +154,6 @@ export default function BillPrint() {
 
   const handlePrint = () => {
     window.print();
-  };
-
-  const handleThermalPrint = () => {
-    setThermalViewOpen(true);
   };
 
   const handleDeleteBill = () => {
@@ -315,15 +310,6 @@ export default function BillPrint() {
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline"
-              onClick={handleThermalPrint}
-              data-testid="button-thermal-view"
-            >
-              <Receipt className="h-4 w-4 mr-2" />
-              Thermal View
-            </Button>
-            
             {/* Three Dots Dropdown Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -452,9 +438,9 @@ export default function BillPrint() {
                           item.quantity
                         )}
                       </td>
-                      <td className="py-2 text-right font-mono">Rs. {Math.round(parseFloat(item.rate))}</td>
+                      <td className="py-2 text-right font-mono">{Math.round(parseFloat(item.rate))}</td>
                       <td className="py-2 text-right font-mono" data-testid={`text-item-subtotal-${index}`}>
-                        Rs. {Math.round(parseFloat(item.subtotal))}
+                        {Math.round(parseFloat(item.subtotal))}
                       </td>
                       {editMode && (
                         <td className="py-2 text-right no-print">
@@ -474,34 +460,23 @@ export default function BillPrint() {
               </table>
             </div>
 
+            {/* Simplified Amount Section - Removed GST, Subtotal, and Rs. */}
             <div className="border-t border-border pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-mono">
-                  Rs. {Math.round(parseFloat(sale.totalAmount) / 1.18)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Tax (18% GST):</span>
-                <span className="font-mono">
-                  Rs. {Math.round(parseFloat(sale.totalAmount) - parseFloat(sale.totalAmount) / 1.18)}
-                </span>
-              </div>
               <div className="flex justify-between text-lg font-bold border-t border-border pt-2">
-                <span>Total Amount:</span>
-                <span className="font-mono" data-testid="text-total-amount">Rs. {Math.round(parseFloat(sale.totalAmount))}</span>
+                <span>TOTAL AMOUNT:</span>
+                <span className="font-mono" data-testid="text-total-amount">{Math.round(parseFloat(sale.totalAmount))}</span>
               </div>
             </div>
 
             <div className="border-t border-border pt-4 space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Amount Paid:</span>
-                <span className="font-mono" data-testid="text-amount-paid">Rs. {Math.round(parseFloat(sale.amountPaid))}</span>
+                <span className="text-muted-foreground">AMOUNT PAID:</span>
+                <span className="font-mono" data-testid="text-amount-paid">{Math.round(parseFloat(sale.amountPaid))}</span>
               </div>
               {!isPaid && (
                 <div className="flex justify-between text-sm font-semibold text-destructive">
-                  <span>Outstanding:</span>
-                  <span className="font-mono" data-testid="text-outstanding">Rs. {Math.round(outstanding)}</span>
+                  <span>BALANCE DUE:</span>
+                  <span className="font-mono" data-testid="text-outstanding">{Math.round(outstanding)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center">
@@ -605,7 +580,7 @@ export default function BillPrint() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-mono font-medium">Rs. {Math.round(parseFloat(color.variant.rate))}</p>
+                          <p className="font-mono font-medium">{Math.round(parseFloat(color.variant.rate))}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -635,7 +610,7 @@ export default function BillPrint() {
                   <div className="p-3 bg-muted rounded-md">
                     <div className="flex justify-between font-mono">
                       <span>Subtotal:</span>
-                      <span>Rs. {Math.round(parseFloat(selectedColor.variant.rate) * parseInt(quantity || "0"))}</span>
+                      <span>{Math.round(parseFloat(selectedColor.variant.rate) * parseInt(quantity || "0"))}</span>
                     </div>
                   </div>
                 )}
@@ -665,115 +640,6 @@ export default function BillPrint() {
         </DialogContent>
       </Dialog>
 
-      {/* Thermal Print View Dialog */}
-      <Dialog open={thermalViewOpen} onOpenChange={setThermalViewOpen}>
-        <DialogContent className="max-w-[80mm] p-0 print:max-w-[80mm] print:p-0 print:block">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Thermal Print View</DialogTitle>
-            <DialogDescription>
-              Thermal printer optimized receipt view
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-center print:p-0 print:justify-start">
-            {/* Thermal Receipt - Optimized for 80mm printers */}
-            <div className="w-[80mm] min-h-[200mm] bg-white text-black p-2 font-mono print:p-0 print:w-[80mm] print:min-h-0">
-              {/* Header Section */}
-              <div className="text-center mb-2 border-b border-black pb-2">
-                <h1 className="text-lg font-bold uppercase leading-tight tracking-tight">ALI MUHAMMAD PAINTS</h1>
-                <p className="text-xs font-medium leading-tight">Basti Malook (Multan) 03008683395</p>
-               
-                <p className="text-xs mt-1 font-medium">INVOICE</p>
-                <p className="text-xs">#{sale.id.slice(0, 8).toUpperCase()}</p>
-              </div>
-
-              {/* Customer & Date Info */}
-              <div className="text-xs mb-3 space-y-1">
-                <div className="flex justify-between">
-                  <span className="font-medium">Customer:</span>
-                  <span className="font-bold text-right max-w-[45mm] truncate">{sale.customerName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Phone:</span>
-                  <span>{sale.customerPhone}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Date:</span>
-                  <span>{formatDate(sale.createdAt)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-medium">Time:</span>
-                  <span>{new Date(sale.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-                </div>
-              </div>
-
-              {/* Items Table Header */}
-              <div className="border-y border-black py-1 mb-1 text-xs font-bold">
-                <div className="grid grid-cols-12 gap-1">
-                  <div className="col-span-1">#</div>
-                  <div className="col-span-7">ITEM DESCRIPTION</div>
-                  <div className="col-span-4 text-right">QTY x RATE = AMOUNT</div>
-                </div>
-              </div>
-
-              {/* Items List - Compact Format */}
-              <div className="mb-2 text-xs">
-                {sale.saleItems.map((item, i) => (
-                  <div key={item.id} className="mb-1 pb-1 border-b border-dashed border-gray-400">
-                    <div className="grid grid-cols-12 gap-1">
-                      <div className="col-span-1 font-medium">{i + 1}</div>
-                      <div className="col-span-7">
-                        <div className="leading-tight">
-                          {item.color.colorName}, {item.color.colorCode}, {item.color.variant.packingSize}
-                        </div>
-                      </div>
-                      <div className="col-span-4 text-right font-mono">
-                        <div>{item.quantity} x {Math.round(parseFloat(item.rate))} = {Math.round(parseFloat(item.subtotal))}</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-             
-              <div className="border-t border-black pt-2 text-xs">
-                <div className="flex justify-between font-bold text-sm border-b border-double border-black pb-1 mb-1">
-                  <span>TOTAL AMOUNT:</span>
-                  <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount))}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span>AMOUNT PAID:</span>
-                  <span className="font-mono font-bold">Rs. {Math.round(parseFloat(sale.amountPaid))}</span>
-                </div>
-                {outstanding > 0 && (
-                  <div className="flex justify-between font-bold text-red-600 mt-1">
-                    <span>BALANCE DUE:</span>
-                    <span className="font-mono">Rs. {Math.round(outstanding)}</span>
-                  </div>
-                )}
-              </div>
-
-            
-
-              {/* Footer */}
-              <div className="text-center mt-4 pt-2 border-t border-black">
-                <p className="text-xs font-medium mb-1">Thank you for your business!</p>
-               
-               
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="flex justify-end gap-2 pt-4 no-print">
-            <Button variant="outline" onClick={() => setThermalViewOpen(false)}>
-              Close
-            </Button>
-            <Button onClick={handlePrint}>
-              Print Thermal
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <style>{`
         @media print {
           body * {
@@ -791,20 +657,8 @@ export default function BillPrint() {
           .no-print {
             display: none !important;
           }
-          
-          /* Thermal print specific styles */
-          @page {
-            margin: 0;
-            size: 80mm auto;
-          }
-          
-          body {
-            margin: 0;
-            padding: 0;
-          }
         }
         
-        /* Thermal view specific styles */
         .font-mono {
           font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         }
