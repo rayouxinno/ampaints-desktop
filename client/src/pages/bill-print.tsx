@@ -325,110 +325,110 @@ export default function BillPrint() {
           </div>
         </div>
 
-        <Card className="print:shadow-none" data-testid="bill-receipt">
-          <CardContent className="p-8 space-y-6">
-            <div className="text-center border-b border-border pb-4">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
-                  <span className="text-xl font-bold text-primary-foreground">AMP</span>
-                </div>
-                <h1 className="text-2xl font-bold">A.M Paints</h1>
-              </div>
-              <p className="text-sm text-muted-foreground">Dunyapur Road, Basti Malook (Multan). 03008683395</p>
-              <p className="text-xs text-muted-foreground mt-1">Invoice #{sale.id.slice(0, 8).toUpperCase()}</p>
+        <Card className="print:shadow-none print:border-0" data-testid="bill-receipt">
+          <CardContent className="p-4 print:p-2 space-y-4 print:space-y-2">
+            {/* Header - Compact for thermal printer */}
+            <div className="text-center border-b border-black pb-2 print:pb-1">
+              <h1 className="text-xl print:text-lg font-bold leading-tight">ALI MUHAMMAD Paints</h1>
+              <p className="text-xs print:text-xs leading-tight">Basti Malook (Multan). 03008683395</p>
+              <p className="text-xs print:text-xs mt-1">Invoice #{sale.id.slice(0, 8).toUpperCase()}</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            {/* Customer Info - Compact */}
+            <div className="grid grid-cols-2 gap-2 text-sm print:text-xs">
               <div>
-                <p className="text-muted-foreground mb-1">Customer Name</p>
-                <p className="font-medium" data-testid="text-customer-name">{sale.customerName}</p>
+                <p className="font-medium mb-1">Customer:</p>
+                <p className="font-bold" data-testid="text-customer-name">{sale.customerName}</p>
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">Phone Number</p>
-                <p className="font-medium" data-testid="text-customer-phone">{sale.customerPhone}</p>
+                <p className="font-medium mb-1">Phone:</p>
+                <p className="font-bold" data-testid="text-customer-phone">{sale.customerPhone}</p>
               </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Date</p>
-                <p className="font-medium">{formatDate(sale.createdAt)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Time</p>
-                <p className="font-medium">{new Date(sale.createdAt).toLocaleTimeString()}</p>
+              <div className="col-span-2">
+                <p className="font-medium mb-1">Date:</p>
+                <p className="font-bold">{formatDate(sale.createdAt)}</p>
               </div>
             </div>
 
-            <div className="border-t border-border pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold">Items</h2>
+            {/* Items Table - Compact */}
+            <div className="border-t border-black pt-2 print:pt-1">
+              <div className="flex items-center justify-between mb-2 print:mb-1">
+                <h2 className="font-semibold text-sm print:text-sm">ITEMS</h2>
                 {editMode && (
-                  <Badge variant="secondary" className="no-print">
+                  <Badge variant="secondary" className="no-print text-xs">
                     Edit Mode
                   </Badge>
                 )}
               </div>
-              <table className="w-full text-sm">
-                <thead className="border-b border-border">
-                  <tr className="text-left">
-                    <th className="pb-2 font-medium text-muted-foreground">Color</th>
-                    <th className="pb-2 font-medium text-muted-foreground">Size</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Qty</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Rate</th>
-                    <th className="pb-2 font-medium text-muted-foreground text-right">Amount</th>
+              <table className="w-full text-xs print:text-xs">
+                <thead>
+                  <tr className="border-b border-black text-left">
+                    <th className="pb-1 font-bold w-8">#</th>
+                    <th className="pb-1 font-bold">Product</th>
+                    <th className="pb-1 font-bold text-right w-12">Qty</th>
+                    <th className="pb-1 font-bold text-right w-16">Rate</th>
+                    <th className="pb-1 font-bold text-right w-20">Amount</th>
                     {editMode && (
-                      <th className="pb-2 font-medium text-muted-foreground text-right no-print">Actions</th>
+                      <th className="pb-1 font-bold text-right w-12 no-print">Actions</th>
                     )}
                   </tr>
                 </thead>
                 <tbody>
                   {sale.saleItems.map((item, index) => (
-                    <tr key={item.id} className="border-b border-border last:border-0">
-                      <td className="py-2">
+                    <tr key={item.id} className="border-b border-gray-300 last:border-0">
+                      <td className="py-1 align-top">{index + 1}</td>
+                      <td className="py-1 align-top">
                         <div>
-                          <p className="text-sm">{item.color.colorName}</p>
-                          <Badge variant="outline" className="text-xs">{item.color.colorCode}</Badge>
+                          <p className="font-medium leading-tight">{item.color.colorName}</p>
+                          <Badge variant="outline" className="text-xs px-1 py-0 leading-tight">
+                            {item.color.colorCode}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground leading-tight">
+                            {item.color.variant.packingSize}
+                          </p>
                         </div>
                       </td>
-                      <td className="py-2">{item.color.variant.packingSize}</td>
-                      <td className="py-2 text-right font-mono">
+                      <td className="py-1 text-right font-mono align-top">
                         {editMode ? (
-                          <div className="flex items-center justify-end gap-2 no-print">
+                          <div className="flex items-center justify-end gap-1 no-print">
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-6 w-6 p-0"
+                              className="h-5 w-5 p-0"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
                               disabled={updateQuantityMutation.isPending || item.quantity <= 1}
                             >
-                              <Minus className="h-3 w-3" />
+                              <Minus className="h-2 w-2" />
                             </Button>
-                            <span className="min-w-8 text-center">{item.quantity}</span>
+                            <span className="min-w-6 text-center">{item.quantity}</span>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-6 w-6 p-0"
+                              className="h-5 w-5 p-0"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
                               disabled={updateQuantityMutation.isPending}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Plus className="h-2 w-2" />
                             </Button>
                           </div>
                         ) : (
                           item.quantity
                         )}
                       </td>
-                      <td className="py-2 text-right font-mono">Rs. {Math.round(parseFloat(item.rate))}</td>
-                      <td className="py-2 text-right font-mono" data-testid={`text-item-subtotal-${index}`}>
-                        Rs. {Math.round(parseFloat(item.subtotal))}
+                      <td className="py-1 text-right font-mono align-top">Rs.{Math.round(parseFloat(item.rate))}</td>
+                      <td className="py-1 text-right font-mono font-bold align-top" data-testid={`text-item-subtotal-${index}`}>
+                        Rs.{Math.round(parseFloat(item.subtotal))}
                       </td>
                       {editMode && (
-                        <td className="py-2 text-right no-print">
+                        <td className="py-1 text-right align-top no-print">
                           <Button
                             variant="destructive"
                             size="sm"
+                            className="h-5 w-5 p-0"
                             onClick={() => handleRemoveItem(item.id)}
                             disabled={deleteItemMutation.isPending}
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-2 w-2" />
                           </Button>
                         </td>
                       )}
@@ -438,41 +438,31 @@ export default function BillPrint() {
               </table>
             </div>
 
-            <div className="border-t border-border pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-mono">
-                  Rs. {Math.round(parseFloat(sale.totalAmount) / 1.18)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Tax (18% GST):</span>
-                <span className="font-mono">
-                  Rs. {Math.round(parseFloat(sale.totalAmount) - parseFloat(sale.totalAmount) / 1.18)}
-                </span>
-              </div>
-              <div className="flex justify-between text-lg font-bold border-t border-border pt-2">
-                <span>Total Amount:</span>
-                <span className="font-mono" data-testid="text-total-amount">Rs. {Math.round(parseFloat(sale.totalAmount))}</span>
+            {/* Totals - Simplified without GST */}
+            <div className="border-t border-black pt-2 print:pt-1 space-y-1">
+              <div className="flex justify-between text-sm print:text-sm font-bold border-t border-black pt-1">
+                <span>TOTAL AMOUNT:</span>
+                <span className="font-mono" data-testid="text-total-amount">Rs.{Math.round(parseFloat(sale.totalAmount))}</span>
               </div>
             </div>
 
-            <div className="border-t border-border pt-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Amount Paid:</span>
-                <span className="font-mono" data-testid="text-amount-paid">Rs. {Math.round(parseFloat(sale.amountPaid))}</span>
+            {/* Payment Info */}
+            <div className="border-t border-black pt-2 print:pt-1 space-y-1">
+              <div className="flex justify-between text-sm print:text-sm">
+                <span className="font-medium">Amount Paid:</span>
+                <span className="font-mono font-bold" data-testid="text-amount-paid">Rs.{Math.round(parseFloat(sale.amountPaid))}</span>
               </div>
               {!isPaid && (
-                <div className="flex justify-between text-sm font-semibold text-destructive">
+                <div className="flex justify-between text-sm print:text-sm font-bold text-destructive">
                   <span>Outstanding:</span>
-                  <span className="font-mono" data-testid="text-outstanding">Rs. {Math.round(outstanding)}</span>
+                  <span className="font-mono" data-testid="text-outstanding">Rs.{Math.round(outstanding)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Payment Status:</span>
+                <span className="text-sm print:text-sm font-medium">Status:</span>
                 <Badge
                   variant={isPaid ? "default" : isPartial ? "secondary" : "outline"}
-                  className="ml-2"
+                  className="ml-2 text-xs print:text-xs"
                   data-testid="badge-payment-status"
                 >
                   {sale.paymentStatus.toUpperCase()}
@@ -480,10 +470,11 @@ export default function BillPrint() {
               </div>
             </div>
 
-            <div className="border-t border-border pt-4 text-center">
-              <p className="text-sm text-muted-foreground">Thank you for your business!</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                For any queries, please contact us
+            {/* Footer */}
+            <div className="border-t border-black pt-2 print:pt-1 text-center">
+              <p className="text-sm print:text-xs font-bold">Thank you for your business!</p>
+              <p className="text-xs print:text-xs mt-1">
+                For queries: 03008683395
               </p>
             </div>
           </CardContent>
@@ -631,6 +622,8 @@ export default function BillPrint() {
         @media print {
           body * {
             visibility: hidden;
+            margin: 0 !important;
+            padding: 0 !important;
           }
           .print\\:shadow-none, .print\\:shadow-none * {
             visibility: visible;
@@ -639,10 +632,43 @@ export default function BillPrint() {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: 1px solid #000 !important;
           }
           .no-print {
             display: none !important;
+          }
+          /* Thermal printer optimization */
+          @page {
+            margin: 0;
+            padding: 0;
+            size: auto;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: white !important;
+            color: black !important;
+            font-family: 'Courier New', monospace !important;
+            font-weight: bold !important;
+            line-height: 1 !important;
+          }
+          /* Ensure maximum contrast for thermal printers */
+          * {
+            color: black !important;
+            background: white !important;
+            border-color: black !important;
+          }
+          /* Compact spacing for thermal paper */
+          .space-y-4 > * + * {
+            margin-top: 0.5rem !important;
+          }
+          .space-y-2 > * + * {
+            margin-top: 0.25rem !important;
           }
         }
       `}</style>
