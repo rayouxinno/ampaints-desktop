@@ -10,7 +10,8 @@ import {
   Plus,
   Minus,
   Receipt,
-  MoreVertical
+  MoreVertical,
+  Printer
 } from "lucide-react";
 import { Link } from "wouter";
 import type { SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
@@ -291,22 +292,15 @@ export default function BillPrint() {
                 Back
               </Button>
             </Link>
-            {/* Edit and Add Item buttons available for both paid and unpaid bills */}
+            {/* Print Bill Button on main page */}
             <Button 
-              variant={editMode ? "default" : "outline"}
-              onClick={() => setEditMode(!editMode)}
-              data-testid="button-edit-mode"
+              variant="default"
+              onClick={handlePrint}
+              data-testid="button-print-bill"
+              className="bg-blue-600 hover:bg-blue-700"
             >
-              <Edit className="h-4 w-4 mr-2" />
-              {editMode ? "Done Editing" : "Edit Bill"}
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={() => setAddItemDialogOpen(true)}
-              data-testid="button-add-item"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Item
+              <Printer className="h-4 w-4 mr-2" />
+              Print Bill
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -318,19 +312,11 @@ export default function BillPrint() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handlePrint}>
-                  Print Bill
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  onClick={() => setEditMode(!editMode)}
-                >
+                <DropdownMenuItem onClick={() => setEditMode(!editMode)}>
                   <Edit className="h-4 w-4 mr-2" />
                   {editMode ? "Done Editing" : "Edit Bill"}
                 </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => setAddItemDialogOpen(true)}
-                >
+                <DropdownMenuItem onClick={() => setAddItemDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Item
                 </DropdownMenuItem>
@@ -347,16 +333,15 @@ export default function BillPrint() {
           </div>
         </div>
 
-        {/* Main Bill View */}
-        <Card className="print:shadow-none hidden print:block" data-testid="bill-receipt">
-          <CardContent className="p-4 print:p-2 space-y-4 print:space-y-2">
-            {/* Header Section - Optimized for 80mm */}
+        {/* Main Bill View - Updated for better print layout */}
+        <Card className="print:shadow-none print:border-0 print:m-0" data-testid="bill-receipt">
+          <CardContent className="p-4 print:p-3 space-y-4 print:space-y-2">
+            {/* Header Section - Optimized for print */}
             <div className="text-center border-b border-black pb-2 print:pb-1">
               <h1 className="text-xl print:text-lg font-bold uppercase leading-tight">A.M PAINTS</h1>
               <p className="text-xs print:text-[10px] font-medium leading-tight">Dunyapur Road, Basti Malook (Multan)</p>
               <p className="text-xs print:text-[10px] font-medium">03008683395</p>
-              <p className="text-xs print:text-[10px] font-medium mt-1">INVOICE</p>
-              <p className="text-xs print:text-[10px]">#{sale.id.slice(0, 8).toUpperCase()}</p>
+              <p className="text-xs print:text-[10px] font-medium mt-1">INVOICE #{sale.id.slice(0, 8).toUpperCase()}</p>
             </div>
 
             {/* Customer & Date Info */}
@@ -373,40 +358,29 @@ export default function BillPrint() {
                 <span className="font-medium">Date:</span>
                 <span>{formatDate(sale.createdAt)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Time:</span>
-                <span>{new Date(sale.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
-              </div>
             </div>
 
             {/* Items Table Header */}
             <div className="border-y border-black py-1 text-xs print:text-[10px] font-bold">
               <div className="grid grid-cols-12 gap-1">
-                <div className="col-span-1">#</div>
-                <div className="col-span-6">ITEM DESCRIPTION</div>
-                <div className="col-span-2 text-right">QTY</div>
+                <div className="col-span-6">DESCRIPTION</div>
+                <div className="col-span-3 text-center">QTY x PRICE</div>
                 <div className="col-span-3 text-right">AMOUNT</div>
               </div>
             </div>
 
-            {/* Items List - Compact Format with Color Code */}
+            {/* Items List - Compact Format */}
             <div className="text-xs print:text-[10px] space-y-1">
               {sale.saleItems.map((item, i) => (
                 <div key={item.id} className="pb-1 border-b border-dashed border-gray-400">
-                  <div className="grid grid-cols-12 gap-1">
-                    <div className="col-span-1 font-medium">{i + 1}</div>
-                    <div className="col-span-6">
-                      <div className="leading-tight font-medium">
-                        {item.color.colorName}, {item.color.colorCode}
-                      </div>
-                      <div className="leading-tight text-[10px] print:text-[9px] text-gray-600">
-                        {item.color.variant.packingSize}
-                      </div>
+                  <div className="grid grid-cols-12 gap-1 items-start">
+                    <div className="col-span-6 leading-tight font-medium break-words">
+                      {item.color.colorName}, {item.color.colorCode}, {item.color.variant.packingSize}
                     </div>
-                    <div className="col-span-2 text-right font-mono">
-                      {item.quantity}
+                    <div className="col-span-3 text-center font-mono leading-tight">
+                      {item.quantity} x {Math.round(parseFloat(item.rate))}
                     </div>
-                    <div className="col-span-3 text-right font-mono font-bold">
+                    <div className="col-span-3 text-right font-mono font-bold leading-tight">
                       {Math.round(parseFloat(item.subtotal))}
                     </div>
                   </div>
@@ -414,7 +388,7 @@ export default function BillPrint() {
               ))}
             </div>
 
-            {/* Amount Section */}
+            {/* Amount Section - Right Aligned Calculations */}
             <div className="border-t border-black pt-2 text-xs print:text-[10px] space-y-1">
               <div className="flex justify-between font-bold text-sm print:text-xs border-b border-double border-black pb-1">
                 <span>TOTAL AMOUNT:</span>
@@ -553,7 +527,7 @@ export default function BillPrint() {
               </table>
             </div>
 
-            {/* Simplified Amount Section */}
+            {/* Amount Section - Right Aligned */}
             <div className="border-t border-border pt-4 space-y-2">
               <div className="flex justify-between text-lg font-bold border-t border-border pt-2">
                 <span>TOTAL AMOUNT:</span>
@@ -736,6 +710,7 @@ export default function BillPrint() {
             box-shadow: none;
             margin: 0;
             padding: 0;
+            border: 1px solid black !important;
           }
           .no-print, .print\\:hidden {
             display: none !important;
@@ -744,9 +719,10 @@ export default function BillPrint() {
             display: block !important;
           }
           
-          /* Thermal print specific styles for 80mm */
+          /* Thermal print specific styles for 80mm - No waste */
           @page {
             margin: 0;
+            padding: 0;
             size: 80mm auto;
           }
           
@@ -757,6 +733,21 @@ export default function BillPrint() {
             font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
             font-size: 10px;
             background: white;
+            -webkit-print-color-adjust: exact;
+          }
+          
+          /* Clean borders for print */
+          .border-black {
+            border-color: black !important;
+            border-width: 1px !important;
+          }
+          
+          .border-dashed {
+            border-style: dashed !important;
+          }
+          
+          .border-double {
+            border-style: double !important;
           }
           
           /* Optimize text colors for thermal printing */
@@ -771,10 +762,24 @@ export default function BillPrint() {
           .text-red-600 {
             color: black !important;
             font-weight: bold;
+            -webkit-print-color-adjust: exact;
           }
           
-          .border-border, .border-black {
+          .border-border {
             border-color: black !important;
+          }
+          
+          /* Ensure proper spacing */
+          .space-y-1 > * + * {
+            margin-top: 0.25rem;
+          }
+          
+          .space-y-2 > * + * {
+            margin-top: 0.5rem;
+          }
+          
+          .space-y-4 > * + * {
+            margin-top: 1rem;
           }
         }
         
