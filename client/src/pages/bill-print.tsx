@@ -347,7 +347,100 @@ export default function BillPrint() {
           </div>
         </div>
 
-        <Card className="print:shadow-none" data-testid="bill-receipt">
+        {/* Main Bill View */}
+        <Card className="print:shadow-none hidden print:block" data-testid="bill-receipt">
+          <CardContent className="p-4 print:p-2 space-y-4 print:space-y-2">
+            {/* Header Section - Optimized for 80mm */}
+            <div className="text-center border-b border-black pb-2 print:pb-1">
+              <h1 className="text-xl print:text-lg font-bold uppercase leading-tight">A.M PAINTS</h1>
+              <p className="text-xs print:text-[10px] font-medium leading-tight">Dunyapur Road, Basti Malook (Multan)</p>
+              <p className="text-xs print:text-[10px] font-medium">03008683395</p>
+              <p className="text-xs print:text-[10px] font-medium mt-1">INVOICE</p>
+              <p className="text-xs print:text-[10px]">#{sale.id.slice(0, 8).toUpperCase()}</p>
+            </div>
+
+            {/* Customer & Date Info */}
+            <div className="text-xs print:text-[10px] space-y-1">
+              <div className="flex justify-between">
+                <span className="font-medium">Customer:</span>
+                <span className="font-bold text-right max-w-[45mm] truncate">{sale.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">Phone:</span>
+                <span>{sale.customerPhone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">Date:</span>
+                <span>{formatDate(sale.createdAt)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium">Time:</span>
+                <span>{new Date(sale.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+              </div>
+            </div>
+
+            {/* Items Table Header */}
+            <div className="border-y border-black py-1 text-xs print:text-[10px] font-bold">
+              <div className="grid grid-cols-12 gap-1">
+                <div className="col-span-1">#</div>
+                <div className="col-span-6">ITEM DESCRIPTION</div>
+                <div className="col-span-2 text-right">QTY</div>
+                <div className="col-span-3 text-right">AMOUNT</div>
+              </div>
+            </div>
+
+            {/* Items List - Compact Format with Color Code */}
+            <div className="text-xs print:text-[10px] space-y-1">
+              {sale.saleItems.map((item, i) => (
+                <div key={item.id} className="pb-1 border-b border-dashed border-gray-400">
+                  <div className="grid grid-cols-12 gap-1">
+                    <div className="col-span-1 font-medium">{i + 1}</div>
+                    <div className="col-span-6">
+                      <div className="leading-tight font-medium">
+                        {item.color.colorName}, {item.color.colorCode}
+                      </div>
+                      <div className="leading-tight text-[10px] print:text-[9px] text-gray-600">
+                        {item.color.variant.packingSize}
+                      </div>
+                    </div>
+                    <div className="col-span-2 text-right font-mono">
+                      {item.quantity}
+                    </div>
+                    <div className="col-span-3 text-right font-mono font-bold">
+                      {Math.round(parseFloat(item.subtotal))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Amount Section */}
+            <div className="border-t border-black pt-2 text-xs print:text-[10px] space-y-1">
+              <div className="flex justify-between font-bold text-sm print:text-xs border-b border-double border-black pb-1">
+                <span>TOTAL AMOUNT:</span>
+                <span className="font-mono">{Math.round(parseFloat(sale.totalAmount))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>AMOUNT PAID:</span>
+                <span className="font-mono font-bold">{Math.round(parseFloat(sale.amountPaid))}</span>
+              </div>
+              {outstanding > 0 && (
+                <div className="flex justify-between font-bold text-red-600">
+                  <span>BALANCE DUE:</span>
+                  <span className="font-mono">{Math.round(outstanding)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="text-center border-t border-black pt-2">
+              <p className="text-xs print:text-[10px] font-medium">Thank you for your business!</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Edit View (Non-print) */}
+        <Card className="print:shadow-none print:hidden" data-testid="bill-receipt-edit">
           <CardContent className="p-8 space-y-6">
             <div className="text-center border-b border-border pb-4">
               <div className="flex items-center justify-center gap-2 mb-2">
@@ -406,8 +499,8 @@ export default function BillPrint() {
                     <tr key={item.id} className="border-b border-border last:border-0">
                       <td className="py-2">
                         <div>
-                          <p className="text-sm">{item.color.colorName}</p>
-                          <Badge variant="outline" className="text-xs">{item.color.colorCode}</Badge>
+                          <p className="text-sm font-medium">{item.color.colorName}, {item.color.colorCode}</p>
+                          <Badge variant="outline" className="text-xs">{item.color.variant.product.company}</Badge>
                         </div>
                       </td>
                       <td className="py-2">{item.color.variant.packingSize}</td>
@@ -460,7 +553,7 @@ export default function BillPrint() {
               </table>
             </div>
 
-            {/* Simplified Amount Section - Removed GST, Subtotal, and Rs. */}
+            {/* Simplified Amount Section */}
             <div className="border-t border-border pt-4 space-y-2">
               <div className="flex justify-between text-lg font-bold border-t border-border pt-2">
                 <span>TOTAL AMOUNT:</span>
@@ -479,23 +572,10 @@ export default function BillPrint() {
                   <span className="font-mono" data-testid="text-outstanding">{Math.round(outstanding)}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Payment Status:</span>
-                <Badge
-                  variant={isPaid ? "default" : isPartial ? "secondary" : "outline"}
-                  className="ml-2"
-                  data-testid="badge-payment-status"
-                >
-                  {sale.paymentStatus.toUpperCase()}
-                </Badge>
-              </div>
             </div>
 
             <div className="border-t border-border pt-4 text-center">
               <p className="text-sm text-muted-foreground">Thank you for your business!</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                For any queries, please contact us
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -572,8 +652,7 @@ export default function BillPrint() {
                             <Badge variant="outline">{color.variant.packingSize}</Badge>
                           </div>
                           <div className="flex items-center gap-2 text-sm">
-                            <span className="text-muted-foreground">{color.colorName}</span>
-                            <Badge variant="secondary">{color.colorCode}</Badge>
+                            <span className="text-muted-foreground font-medium">{color.colorName}, {color.colorCode}</span>
                             <Badge variant={color.stockQuantity > 0 ? "default" : "destructive"}>
                               Stock: {color.stockQuantity}
                             </Badge>
@@ -652,10 +731,50 @@ export default function BillPrint() {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
+            width: 80mm;
+            background: white;
+            box-shadow: none;
+            margin: 0;
+            padding: 0;
           }
-          .no-print {
+          .no-print, .print\\:hidden {
             display: none !important;
+          }
+          .print\\:block {
+            display: block !important;
+          }
+          
+          /* Thermal print specific styles for 80mm */
+          @page {
+            margin: 0;
+            size: 80mm auto;
+          }
+          
+          body {
+            margin: 0;
+            padding: 0;
+            width: 80mm;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 10px;
+            background: white;
+          }
+          
+          /* Optimize text colors for thermal printing */
+          .text-muted-foreground {
+            color: black !important;
+          }
+          
+          .text-gray-600 {
+            color: #666 !important;
+          }
+          
+          .text-red-600 {
+            color: black !important;
+            font-weight: bold;
+          }
+          
+          .border-border, .border-black {
+            border-color: black !important;
           }
         }
         
