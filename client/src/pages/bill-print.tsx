@@ -151,91 +151,7 @@ export default function BillPrint() {
   };
 
   const handleThermalPrint = () => {
-    // Print directly to default printer
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
-    const thermalContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Thermal Print</title>
-        <style>
-          @media print {
-            body { margin: 0; padding: 0; font-family: 'Courier New', monospace; }
-            .receipt { width: 80mm; padding: 5px; font-size: 12px; }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .border-bottom { border-bottom: 1px dashed #000; }
-            .mt-1 { margin-top: 2px; }
-            .mt-2 { margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { padding: 2px 0; }
-            .border-top { border-top: 1px dashed #000; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="receipt">
-          <div class="text-center">
-            <div class="font-bold">ALI MUHAMMAD PAINTS</div>
-            <div>Basti Malook (Multan)</div>
-            <div class="mt-1">Invoice #${sale?.id.slice(0, 8).toUpperCase()}</div>
-          </div>
-          
-          <div class="mt-2">
-            <div><span class="font-bold">Customer:</span> ${sale?.customerName}</div>
-            <div><span class="font-bold">Phone:</span> ${sale?.customerPhone}</div>
-            <div><span class="font-bold">Date:</span> ${sale ? formatDate(sale.createdAt) : ''}</div>
-          </div>
-          
-          <table class="mt-2">
-            <thead>
-              <tr class="border-bottom">
-                <th>Item</th>
-                <th class="text-right">Qty</th>
-                <th class="text-right">Rate</th>
-                <th class="text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sale?.saleItems.map((item, i) => `
-                <tr>
-                  <td>${item.color.colorCode}</td>
-                  <td class="text-right">${item.quantity}</td>
-                  <td class="text-right">${Math.round(parseFloat(item.rate))}</td>
-                  <td class="text-right">${Math.round(parseFloat(item.subtotal))}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          
-          <div class="border-top mt-2">
-            <div class="text-right font-bold">Total: Rs. ${sale ? Math.round(parseFloat(sale.totalAmount)) : 0}</div>
-            <div class="text-right">Paid: Rs. ${sale ? Math.round(parseFloat(sale.amountPaid)) : 0}</div>
-            ${sale && parseFloat(sale.totalAmount) - parseFloat(sale.amountPaid) > 0 ? 
-              `<div class="text-right font-bold">Due: Rs. ${Math.round(parseFloat(sale.totalAmount) - parseFloat(sale.amountPaid))}</div>` : ''}
-          </div>
-          
-          <div class="text-center mt-2">
-            Thank you for your business!
-          </div>
-        </div>
-        <script>
-          window.onload = function() {
-            window.print();
-            setTimeout(function() {
-              window.close();
-            }, 100);
-          };
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(thermalContent);
-    printWindow.document.close();
+    setThermalViewOpen(true);
   };
 
   const handleDeleteBill = () => {
@@ -267,7 +183,11 @@ export default function BillPrint() {
       return;
     }
 
-    // REMOVED STOCK CHECK - items can be added even if stock is 0
+    if (qty > selectedColor.stockQuantity) {
+      toast({ title: "Not enough stock available", variant: "destructive" });
+      return;
+    }
+
     const rate = parseFloat(selectedColor.variant.rate);
     const subtotal = rate * qty;
 
@@ -396,14 +316,13 @@ export default function BillPrint() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* REMOVED Print Bill Button */}
             <Button 
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              variant="outline"
               onClick={handleThermalPrint}
-              data-testid="button-print-view"
+              data-testid="button-thermal-view"
             >
-              <Printer className="h-4 w-4 mr-2" />
-              Print View
+              <Receipt className="h-4 w-4 mr-2" />
+              Thermal View
             </Button>
             <Button 
               variant="destructive" 
@@ -412,6 +331,10 @@ export default function BillPrint() {
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete Bill
+            </Button>
+            <Button onClick={handlePrint} data-testid="button-print">
+              <Printer className="h-4 w-4 mr-2" />
+              Print Bill
             </Button>
           </div>
         </div>
@@ -654,8 +577,7 @@ export default function BillPrint() {
                           <div className="flex items-center gap-2 text-sm">
                             <span className="text-muted-foreground">{color.colorName}</span>
                             <Badge variant="secondary">{color.colorCode}</Badge>
-                            {/* REMOVED stock quantity check for adding items */}
-                            <Badge variant="default">
+                            <Badge variant={color.stockQuantity > 0 ? "default" : "destructive"}>
                               Stock: {color.stockQuantity}
                             </Badge>
                           </div>
@@ -678,6 +600,7 @@ export default function BillPrint() {
                   id="quantity"
                   type="number"
                   min="1"
+                  max={selectedColor.stockQuantity}
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                 />
@@ -715,6 +638,123 @@ export default function BillPrint() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Thermal Print View Dialog */}
+      <Dialog open={thermalViewOpen} onOpenChange={setThermalViewOpen}>
+        <DialogContent className="max-w-[80mm] p-0 print:max-w-[80mm] print:p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Thermal Print View</DialogTitle>
+            <DialogDescription>
+              Thermal printer optimized receipt view
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center print:p-0">
+            <Card className="w-[80mm] print:w-[80mm] print:shadow-none print:border-0 border-0">
+              <CardContent className="p-4 space-y-3 text-black">
+                {/* Header */}
+                <div className="text-center pb-2">
+                  <h1 className="text-xl font-bold leading-tight">ALI MUHAMMAD Paints</h1>
+                  <p className="text-xs leading-tight">Basti Malook (Multan)</p>
+                  <p className="text-xs mt-1">Invoice #{sale.id.slice(0, 8).toUpperCase()}</p>
+                </div>
+
+                {/* Customer Info */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="font-medium">Customer:</p>
+                    <p className="font-bold">{sale.customerName}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Phone:</p>
+                    <p className="font-bold">{sale.customerPhone}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="font-medium">Date:</p>
+                    <p className="font-bold">{formatDate(sale.createdAt)}</p>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div className="pt-2">
+                  <table className="w-full text-xs text-black border-collapse">
+                    <thead>
+                      <tr className="border-b border-black text-left">
+                        <th className="pb-1 w-8">#</th>
+                        <th className="pb-1">Description</th>
+                        <th className="pb-1 text-right w-14">Size</th>
+                        <th className="pb-1 text-right w-10">Qty</th>
+                        <th className="pb-1 text-right w-16">Rate</th>
+                        <th className="pb-1 text-right w-20">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sale.saleItems.map((item, i) => (
+                        <tr
+                          key={item.id}
+                          className="border-b border-dotted border-gray-400 last:border-0"
+                        >
+                          <td className="py-1 align-top">{i + 1}</td>
+                          <td className="py-1 align-top">
+                            <p className="font-medium leading-tight">{item.color.colorName}, <span className="font-bold">{item.color.colorCode}</span></p>
+                          </td>
+                          <td className="py-1 text-right font-mono align-top">{item.color.variant.packingSize}</td>
+                          <td className="py-1 text-right font-mono align-top">{item.quantity}</td>
+                          <td className="py-1 text-right font-mono align-top">{Math.round(parseFloat(item.rate))}</td>
+                          <td className="py-1 text-right font-mono font-bold align-top">{Math.round(parseFloat(item.subtotal))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals aligned right */}
+                <div className="pt-2 space-y-1 text-sm text-right text-black border-t border-black">
+                  <div className="font-bold">
+                    <span>Total Amount: </span>
+                    <span className="font-mono ml-2">{Math.round(parseFloat(sale.totalAmount))}</span>
+                  </div>
+                  <div>
+                    <span>Amount Paid: </span>
+                    <span className="font-mono font-bold ml-2">{Math.round(parseFloat(sale.amountPaid))}</span>
+                  </div>
+                  {outstanding > 0 && (
+                    <div className="font-bold">
+                      <span>Outstanding: </span>
+                      <span className="font-mono ml-2">{Math.round(outstanding)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Status */}
+                <div className="flex justify-between items-center text-sm border-t border-black pt-2">
+                  <span className="font-medium">Payment Status:</span>
+                  <Badge
+                    variant={isPaid ? "default" : isPartial ? "secondary" : "outline"}
+                    className="ml-2"
+                  >
+                    {sale.paymentStatus.toUpperCase()}
+                  </Badge>
+                </div>
+
+                {/* Footer with top border */}
+                <div className="pt-2 mt-2 text-center border-t border-black">
+                  <p className="text-sm font-normal">Thank you for your business!</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <DialogFooter className="flex justify-end gap-2 pt-4 no-print">
+            <Button variant="outline" onClick={() => setThermalViewOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handlePrint}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print Thermal
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
