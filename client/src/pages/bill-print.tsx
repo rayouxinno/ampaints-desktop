@@ -679,9 +679,9 @@ export default function BillPrint() {
             <div className="w-[80mm] min-h-[200mm] bg-white text-black p-2 font-mono print:p-0 print:w-[80mm] print:min-h-0">
               {/* Header Section */}
               <div className="text-center mb-2 border-b border-black pb-2">
-                <h1 className="text-lg font-bold uppercase leading-tight tracking-tight">A.M PAINTS</h1>
-                <p className="text-xs font-medium leading-tight">Basti Malook, Dunyapur Road</p>
-                <p className="text-xs leading-tight">Multan - 03008683395</p>
+                <h1 className="text-lg font-bold uppercase leading-tight tracking-tight">ALI MUHAMMAD PAINTS</h1>
+                <p className="text-xs font-medium leading-tight">Basti Malook (Multan) 03008683395</p>
+               
                 <p className="text-xs mt-1 font-medium">INVOICE</p>
                 <p className="text-xs">#{sale.id.slice(0, 8).toUpperCase()}</p>
               </div>
@@ -710,74 +710,55 @@ export default function BillPrint() {
               <div className="border-y border-black py-1 mb-1 text-xs font-bold">
                 <div className="grid grid-cols-12 gap-1">
                   <div className="col-span-1">#</div>
-                  <div className="col-span-5">ITEM</div>
-                  <div className="col-span-2 text-right">QTY</div>
-                  <div className="col-span-2 text-right">RATE</div>
-                  <div className="col-span-2 text-right">AMOUNT</div>
+                  <div className="col-span-7">ITEM DESCRIPTION</div>
+                  <div className="col-span-4 text-right">QTY x RATE = AMOUNT</div>
                 </div>
               </div>
 
-              {/* Items List */}
+              {/* Items List - Compact Format */}
               <div className="mb-2 text-xs">
                 {sale.saleItems.map((item, i) => (
                   <div key={item.id} className="mb-1 pb-1 border-b border-dashed border-gray-400">
-                    <div className="grid grid-cols-12 gap-1 mb-1">
+                    <div className="grid grid-cols-12 gap-1">
                       <div className="col-span-1 font-medium">{i + 1}</div>
-                      <div className="col-span-5">
-                        <div className="font-medium leading-tight">{item.color.colorName}</div>
-                        <div className="text-[10px] leading-tight">Code: {item.color.colorCode}</div>
-                        <div className="text-[10px] leading-tight">Size: {item.color.variant.packingSize}</div>
+                      <div className="col-span-7">
+                        <div className="leading-tight">
+                          {item.color.colorName}, {item.color.colorCode}, {item.color.variant.packingSize}
+                        </div>
                       </div>
-                      <div className="col-span-2 text-right font-mono">{item.quantity}</div>
-                      <div className="col-span-2 text-right font-mono">{Math.round(parseFloat(item.rate))}</div>
-                      <div className="col-span-2 text-right font-mono font-bold">{Math.round(parseFloat(item.subtotal))}</div>
+                      <div className="col-span-4 text-right font-mono">
+                        <div>{item.quantity} x {Math.round(parseFloat(item.rate))} = {Math.round(parseFloat(item.subtotal))}</div>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Totals Section */}
+             
               <div className="border-t border-black pt-2 text-xs">
-                <div className="flex justify-between mb-1">
-                  <span>Subtotal:</span>
-                  <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount) / 1.18)}</span>
-                </div>
-                <div className="flex justify-between mb-1">
-                  <span>Tax (18% GST):</span>
-                  <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount) - parseFloat(sale.totalAmount) / 1.18)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-sm border-t border-double border-black pt-1 mt-1">
-                  <span>TOTAL:</span>
+                <div className="flex justify-between font-bold text-sm border-b border-double border-black pb-1 mb-1">
+                  <span>TOTAL AMOUNT:</span>
                   <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount))}</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span>Paid:</span>
+                  <span>AMOUNT PAID:</span>
                   <span className="font-mono font-bold">Rs. {Math.round(parseFloat(sale.amountPaid))}</span>
                 </div>
                 {outstanding > 0 && (
-                  <div className="flex justify-between font-bold text-red-600">
-                    <span>BALANCE:</span>
+                  <div className="flex justify-between font-bold text-red-600 mt-1">
+                    <span>BALANCE DUE:</span>
                     <span className="font-mono">Rs. {Math.round(outstanding)}</span>
                   </div>
                 )}
               </div>
 
-              {/* Payment Status */}
-              <div className="flex justify-between items-center mt-2 pt-2 border-t border-black text-xs">
-                <span className="font-medium">Status:</span>
-                <span className={`font-bold uppercase ${
-                  isPaid ? 'text-green-600' : 
-                  isPartial ? 'text-orange-600' : 'text-red-600'
-                }`}>
-                  {sale.paymentStatus}
-                </span>
-              </div>
+            
 
               {/* Footer */}
               <div className="text-center mt-4 pt-2 border-t border-black">
                 <p className="text-xs font-medium mb-1">Thank you for your business!</p>
-                <p className="text-[10px] text-gray-600">For queries: 03008683395</p>
-                <p className="text-[10px] text-gray-600 mt-1">*** Software by A.M Paints ***</p>
+               
+               
               </div>
             </div>
           </div>
