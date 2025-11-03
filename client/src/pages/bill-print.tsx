@@ -179,7 +179,7 @@ export default function BillPrint() {
       <body>
         <div class="receipt">
           <div class="text-center">
-            <div class="font-bold">ALI MUHAMMAD Paints</div>
+            <div class="font-bold">ALI MUHAMMAD PAINTS</div>
             <div>Basti Malook (Multan)</div>
             <div class="mt-1">Invoice #${sale?.id.slice(0, 8).toUpperCase()}</div>
           </div>
