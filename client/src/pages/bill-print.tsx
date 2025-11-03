@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Printer, 
   ArrowLeft, 
   Edit, 
   Trash2, 
@@ -191,12 +190,6 @@ export default function BillPrint() {
       return;
     }
 
-    // REMOVED STOCK VALIDATION - Allow adding items even when stock is 0
-    // if (qty > selectedColor.stockQuantity) {
-    //   toast({ title: "Not enough stock available", variant: "destructive" });
-    //   return;
-    // }
-
     const rate = parseFloat(selectedColor.variant.rate);
     const subtotal = rate * qty;
 
@@ -303,26 +296,23 @@ export default function BillPrint() {
                 Back
               </Button>
             </Link>
-            {!isPaid && (
-              <>
-                <Button 
-                  variant={editMode ? "default" : "outline"}
-                  onClick={() => setEditMode(!editMode)}
-                  data-testid="button-edit-mode"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  {editMode ? "Done Editing" : "Edit Bill"}
-                </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => setAddItemDialogOpen(true)}
-                  data-testid="button-add-item"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
-                </Button>
-              </>
-            )}
+            {/* Edit and Add Item buttons available for both paid and unpaid bills */}
+            <Button 
+              variant={editMode ? "default" : "outline"}
+              onClick={() => setEditMode(!editMode)}
+              data-testid="button-edit-mode"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              {editMode ? "Done Editing" : "Edit Bill"}
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => setAddItemDialogOpen(true)}
+              data-testid="button-add-item"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
           </div>
           <div className="flex items-center gap-2">
             <Button 
@@ -343,20 +333,17 @@ export default function BillPrint() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handlePrint}>
-                  <Printer className="h-4 w-4 mr-2" />
                   Print Bill
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem 
                   onClick={() => setEditMode(!editMode)}
-                  disabled={isPaid}
                 >
                   <Edit className="h-4 w-4 mr-2" />
                   {editMode ? "Done Editing" : "Edit Bill"}
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => setAddItemDialogOpen(true)}
-                  disabled={isPaid}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Item
@@ -680,107 +667,119 @@ export default function BillPrint() {
 
       {/* Thermal Print View Dialog */}
       <Dialog open={thermalViewOpen} onOpenChange={setThermalViewOpen}>
-        <DialogContent className="max-w-[80mm] p-0 print:max-w-[80mm] print:p-0">
+        <DialogContent className="max-w-[80mm] p-0 print:max-w-[80mm] print:p-0 print:block">
           <DialogHeader className="sr-only">
             <DialogTitle>Thermal Print View</DialogTitle>
             <DialogDescription>
               Thermal printer optimized receipt view
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-center print:p-0">
-            <Card className="w-[80mm] print:w-[80mm] print:shadow-none print:border-0 border-0">
-              <CardContent className="p-4 space-y-3 text-black">
-                {/* Header */}
-                <div className="text-center pb-2">
-                  <h1 className="text-xl font-bold leading-tight">ALI MUHAMMAD Paints</h1>
-                  <p className="text-xs leading-tight">Basti Malook (Multan)</p>
-                  <p className="text-xs mt-1">Invoice #{sale.id.slice(0, 8).toUpperCase()}</p>
-                </div>
+          <div className="flex justify-center print:p-0 print:justify-start">
+            {/* Thermal Receipt - Optimized for 80mm printers */}
+            <div className="w-[80mm] min-h-[200mm] bg-white text-black p-2 font-mono print:p-0 print:w-[80mm] print:min-h-0">
+              {/* Header Section */}
+              <div className="text-center mb-2 border-b border-black pb-2">
+                <h1 className="text-lg font-bold uppercase leading-tight tracking-tight">A.M PAINTS</h1>
+                <p className="text-xs font-medium leading-tight">Basti Malook, Dunyapur Road</p>
+                <p className="text-xs leading-tight">Multan - 03008683395</p>
+                <p className="text-xs mt-1 font-medium">INVOICE</p>
+                <p className="text-xs">#{sale.id.slice(0, 8).toUpperCase()}</p>
+              </div>
 
-                {/* Customer Info */}
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="font-medium">Customer:</p>
-                    <p className="font-bold">{sale.customerName}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Phone:</p>
-                    <p className="font-bold">{sale.customerPhone}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="font-medium">Date:</p>
-                    <p className="font-bold">{formatDate(sale.createdAt)}</p>
-                  </div>
+              {/* Customer & Date Info */}
+              <div className="text-xs mb-3 space-y-1">
+                <div className="flex justify-between">
+                  <span className="font-medium">Customer:</span>
+                  <span className="font-bold text-right max-w-[45mm] truncate">{sale.customerName}</span>
                 </div>
-
-                {/* Items Table */}
-                <div className="pt-2">
-                  <table className="w-full text-xs text-black border-collapse">
-                    <thead>
-                      <tr className="border-b border-black text-left">
-                        <th className="pb-1 w-8">#</th>
-                        <th className="pb-1">Description</th>
-                        <th className="pb-1 text-right w-14">Size</th>
-                        <th className="pb-1 text-right w-10">Qty</th>
-                        <th className="pb-1 text-right w-16">Rate</th>
-                        <th className="pb-1 text-right w-20">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sale.saleItems.map((item, i) => (
-                        <tr
-                          key={item.id}
-                          className="border-b border-dotted border-gray-400 last:border-0"
-                        >
-                          <td className="py-1 align-top">{i + 1}</td>
-                          <td className="py-1 align-top">
-                            <p className="font-medium leading-tight">{item.color.colorName}, <span className="font-bold">{item.color.colorCode}</span></p>
-                          </td>
-                          <td className="py-1 text-right font-mono align-top">{item.color.variant.packingSize}</td>
-                          <td className="py-1 text-right font-mono align-top">{item.quantity}</td>
-                          <td className="py-1 text-right font-mono align-top">{Math.round(parseFloat(item.rate))}</td>
-                          <td className="py-1 text-right font-mono font-bold align-top">{Math.round(parseFloat(item.subtotal))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="flex justify-between">
+                  <span className="font-medium">Phone:</span>
+                  <span>{sale.customerPhone}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Date:</span>
+                  <span>{formatDate(sale.createdAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Time:</span>
+                  <span>{new Date(sale.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                </div>
+              </div>
 
-                {/* Totals aligned right */}
-                <div className="pt-2 space-y-1 text-sm text-right text-black border-t border-black">
-                  <div className="font-bold">
-                    <span>Total Amount: </span>
-                    <span className="font-mono ml-2">{Math.round(parseFloat(sale.totalAmount))}</span>
-                  </div>
-                  <div>
-                    <span>Amount Paid: </span>
-                    <span className="font-mono font-bold ml-2">{Math.round(parseFloat(sale.amountPaid))}</span>
-                  </div>
-                  {outstanding > 0 && (
-                    <div className="font-bold">
-                      <span>Outstanding: </span>
-                      <span className="font-mono ml-2">{Math.round(outstanding)}</span>
+              {/* Items Table Header */}
+              <div className="border-y border-black py-1 mb-1 text-xs font-bold">
+                <div className="grid grid-cols-12 gap-1">
+                  <div className="col-span-1">#</div>
+                  <div className="col-span-5">ITEM</div>
+                  <div className="col-span-2 text-right">QTY</div>
+                  <div className="col-span-2 text-right">RATE</div>
+                  <div className="col-span-2 text-right">AMOUNT</div>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="mb-2 text-xs">
+                {sale.saleItems.map((item, i) => (
+                  <div key={item.id} className="mb-1 pb-1 border-b border-dashed border-gray-400">
+                    <div className="grid grid-cols-12 gap-1 mb-1">
+                      <div className="col-span-1 font-medium">{i + 1}</div>
+                      <div className="col-span-5">
+                        <div className="font-medium leading-tight">{item.color.colorName}</div>
+                        <div className="text-[10px] leading-tight">Code: {item.color.colorCode}</div>
+                        <div className="text-[10px] leading-tight">Size: {item.color.variant.packingSize}</div>
+                      </div>
+                      <div className="col-span-2 text-right font-mono">{item.quantity}</div>
+                      <div className="col-span-2 text-right font-mono">{Math.round(parseFloat(item.rate))}</div>
+                      <div className="col-span-2 text-right font-mono font-bold">{Math.round(parseFloat(item.subtotal))}</div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ))}
+              </div>
 
-                {/* Payment Status */}
-                <div className="flex justify-between items-center text-sm border-t border-black pt-2">
-                  <span className="font-medium">Payment Status:</span>
-                  <Badge
-                    variant={isPaid ? "default" : isPartial ? "secondary" : "outline"}
-                    className="ml-2"
-                  >
-                    {sale.paymentStatus.toUpperCase()}
-                  </Badge>
+              {/* Totals Section */}
+              <div className="border-t border-black pt-2 text-xs">
+                <div className="flex justify-between mb-1">
+                  <span>Subtotal:</span>
+                  <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount) / 1.18)}</span>
                 </div>
+                <div className="flex justify-between mb-1">
+                  <span>Tax (18% GST):</span>
+                  <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount) - parseFloat(sale.totalAmount) / 1.18)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-sm border-t border-double border-black pt-1 mt-1">
+                  <span>TOTAL:</span>
+                  <span className="font-mono">Rs. {Math.round(parseFloat(sale.totalAmount))}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span>Paid:</span>
+                  <span className="font-mono font-bold">Rs. {Math.round(parseFloat(sale.amountPaid))}</span>
+                </div>
+                {outstanding > 0 && (
+                  <div className="flex justify-between font-bold text-red-600">
+                    <span>BALANCE:</span>
+                    <span className="font-mono">Rs. {Math.round(outstanding)}</span>
+                  </div>
+                )}
+              </div>
 
-                {/* Footer with top border */}
-                <div className="pt-2 mt-2 text-center border-t border-black">
-                  <p className="text-sm font-normal">Thank you for your business!</p>
-                </div>
-              </CardContent>
-            </Card>
+              {/* Payment Status */}
+              <div className="flex justify-between items-center mt-2 pt-2 border-t border-black text-xs">
+                <span className="font-medium">Status:</span>
+                <span className={`font-bold uppercase ${
+                  isPaid ? 'text-green-600' : 
+                  isPartial ? 'text-orange-600' : 'text-red-600'
+                }`}>
+                  {sale.paymentStatus}
+                </span>
+              </div>
+
+              {/* Footer */}
+              <div className="text-center mt-4 pt-2 border-t border-black">
+                <p className="text-xs font-medium mb-1">Thank you for your business!</p>
+                <p className="text-[10px] text-gray-600">For queries: 03008683395</p>
+                <p className="text-[10px] text-gray-600 mt-1">*** Software by A.M Paints ***</p>
+              </div>
+            </div>
           </div>
 
           <DialogFooter className="flex justify-end gap-2 pt-4 no-print">
@@ -788,7 +787,6 @@ export default function BillPrint() {
               Close
             </Button>
             <Button onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-2" />
               Print Thermal
             </Button>
           </DialogFooter>
@@ -812,6 +810,22 @@ export default function BillPrint() {
           .no-print {
             display: none !important;
           }
+          
+          /* Thermal print specific styles */
+          @page {
+            margin: 0;
+            size: 80mm auto;
+          }
+          
+          body {
+            margin: 0;
+            padding: 0;
+          }
+        }
+        
+        /* Thermal view specific styles */
+        .font-mono {
+          font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         }
       `}</style>
     </div>
