@@ -10,7 +10,8 @@ import {
   Trash2, 
   Plus,
   Minus,
-  Receipt
+  Receipt,
+  MoreVertical
 } from "lucide-react";
 import { Link } from "wouter";
 import type { SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
@@ -28,6 +29,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function BillPrint() {
   const [, params] = useRoute("/bill/:id");
@@ -183,10 +191,11 @@ export default function BillPrint() {
       return;
     }
 
-    if (qty > selectedColor.stockQuantity) {
-      toast({ title: "Not enough stock available", variant: "destructive" });
-      return;
-    }
+    // REMOVED STOCK VALIDATION - Allow adding items even when stock is 0
+    // if (qty > selectedColor.stockQuantity) {
+    //   toast({ title: "Not enough stock available", variant: "destructive" });
+    //   return;
+    // }
 
     const rate = parseFloat(selectedColor.variant.rate);
     const subtotal = rate * qty;
@@ -324,18 +333,44 @@ export default function BillPrint() {
               <Receipt className="h-4 w-4 mr-2" />
               Thermal View
             </Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => setDeleteDialogOpen(true)}
-              data-testid="button-delete-bill"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Bill
-            </Button>
-            <Button onClick={handlePrint} data-testid="button-print">
-              <Printer className="h-4 w-4 mr-2" />
-              Print Bill
-            </Button>
+            
+            {/* Three Dots Dropdown Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handlePrint}>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print Bill
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => setEditMode(!editMode)}
+                  disabled={isPaid}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  {editMode ? "Done Editing" : "Edit Bill"}
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setAddItemDialogOpen(true)}
+                  disabled={isPaid}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Item
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Bill
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -539,7 +574,7 @@ export default function BillPrint() {
           <DialogHeader>
             <DialogTitle>Add Product to Bill</DialogTitle>
             <DialogDescription>
-              Search and select a product to add to the bill
+              Search and select a product to add to the bill. Items can be added even when stock is 0.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -600,12 +635,14 @@ export default function BillPrint() {
                   id="quantity"
                   type="number"
                   min="1"
-                  max={selectedColor.stockQuantity}
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
                   Available stock: {selectedColor.stockQuantity} units
+                  {selectedColor.stockQuantity === 0 && (
+                    <span className="text-destructive font-medium"> (Out of stock - can still add to bill)</span>
+                  )}
                 </p>
                 {selectedColor && (
                   <div className="p-3 bg-muted rounded-md">
