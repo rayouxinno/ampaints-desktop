@@ -51,6 +51,7 @@ export interface IStorage {
   createSale(sale: InsertSale, items: InsertSaleItem[]): Promise<Sale>;
   updateSalePayment(saleId: string, amount: number): Promise<Sale>;
   addSaleItem(saleId: string, item: InsertSaleItem): Promise<SaleItem>;
+  updateSaleItem(id: string, data: { quantity: number; rate: number; subtotal: number }): Promise<SaleItem>;
   deleteSaleItem(saleItemId: string): Promise<void>;
 
   // Dashboard Stats
@@ -342,6 +343,72 @@ export class DatabaseStorage implements IStorage {
       .where(eq(sales.id, saleId));
 
     return saleItem;
+  }
+
+  // UPDATE SALE ITEM METHOD - ADDED
+  async updateSaleItem(id: string, data: { quantity: number; rate: number; subtotal: number }): Promise<SaleItem> {
+    try {
+      // Get the current item to check stock changes
+      const [currentItem] = await db.select().from(saleItems).where(eq(saleItems.id, id));
+      if (!currentItem) {
+        throw new Error("Sale item not found");
+      }
+
+      // Calculate stock difference
+      const stockDifference = currentItem.quantity - data.quantity;
+
+      // Update the sale item
+      const [updatedItem] = await db
+        .update(saleItems)
+        .set({
+          quantity: data.quantity,
+          rate: data.rate.toString(),
+          subtotal: data.subtotal.toString(),
+          updatedAt: new Date()
+        })
+        .where(eq(saleItems.id, id))
+        .returning();
+
+      // Update stock quantity if quantity changed
+      if (stockDifference !== 0) {
+        await db
+          .update(colors)
+          .set({
+            stockQuantity: sql`${colors.stockQuantity} + ${stockDifference}`,
+          })
+          .where(eq(colors.id, currentItem.colorId));
+      }
+
+      // Recalculate sale total
+      const saleId = currentItem.saleId;
+      const allItems = await db.select().from(saleItems).where(eq(saleItems.saleId, saleId));
+      const newTotal = allItems.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+
+      const [sale] = await db.select().from(sales).where(eq(sales.id, saleId));
+      const amountPaid = parseFloat(sale.amountPaid);
+
+      let paymentStatus: string;
+      if (amountPaid >= newTotal) {
+        paymentStatus = "paid";
+      } else if (amountPaid > 0) {
+        paymentStatus = "partial";
+      } else {
+        paymentStatus = "unpaid";
+      }
+
+      await db
+        .update(sales)
+        .set({
+          totalAmount: newTotal.toString(),
+          paymentStatus,
+        })
+        .where(eq(sales.id, saleId));
+
+      return updatedItem;
+    } catch (error) {
+      console.error("Error updating sale item:", error);
+      throw new Error("Failed to update sale item");
+    }
   }
 
   async deleteSaleItem(saleItemId: string): Promise<void> {
