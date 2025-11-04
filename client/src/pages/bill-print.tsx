@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Receipt, MoreVertical, Edit, Plus, Trash2 } from "lucide-react";
 import { Link } from "wouter";
-import type { SaleWithItems, ColorWithVariantAndProduct } from "@shared/schema";
+import type { SaleWithItems, ColorWithVariantAndProduct, SaleItem } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -33,8 +33,11 @@ export default function BillPrint() {
   const [editMode, setEditMode] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
+  const [editItemDialogOpen, setEditItemDialogOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
+  const [selectedItem, setSelectedItem] = useState<SaleItem | null>(null);
   const [quantity, setQuantity] = useState("1");
+  const [rate, setRate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: sale, isLoading } = useQuery<SaleWithItems>({
@@ -70,12 +73,12 @@ export default function BillPrint() {
     const qty = parseInt(quantity);
     if (qty < 1) return toast({ title: "Invalid quantity", variant: "destructive" });
 
-    const rate = parseFloat(selectedColor.variant.rate);
+    const itemRate = parseFloat(selectedColor.variant.rate);
     apiRequest("POST", `/api/sales/${saleId}/items`, {
       colorId: selectedColor.id,
       quantity: qty,
-      rate,
-      subtotal: rate * qty,
+      rate: itemRate,
+      subtotal: itemRate * qty,
     }).then(() => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
       toast({ title: "Item added" });
@@ -84,6 +87,49 @@ export default function BillPrint() {
       setQuantity("1");
       setSearchQuery("");
     });
+  };
+
+  // Edit Item
+  const handleEditItem = (item: SaleItem) => {
+    setSelectedItem(item);
+    setQuantity(item.quantity.toString());
+    setRate(item.rate.toString());
+    setEditItemDialogOpen(true);
+  };
+
+  // Update Item
+  const handleUpdateItem = () => {
+    if (!selectedItem) return;
+
+    const qty = parseInt(quantity);
+    const itemRate = parseFloat(rate);
+
+    if (qty < 1) return toast({ title: "Invalid quantity", variant: "destructive" });
+    if (itemRate < 0) return toast({ title: "Invalid rate", variant: "destructive" });
+
+    apiRequest("PATCH", `/api/sale-items/${selectedItem.id}`, {
+      quantity: qty,
+      rate: itemRate,
+      subtotal: itemRate * qty,
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+      toast({ title: "Item updated" });
+      setEditItemDialogOpen(false);
+      setSelectedItem(null);
+      setQuantity("1");
+      setRate("");
+    });
+  };
+
+  // Delete Item
+  const handleDeleteItem = (itemId: number) => {
+    apiRequest("DELETE", `/api/sale-items/${itemId}`)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+        toast({ title: "Item deleted" });
+        setEditItemDialogOpen(false);
+        setSelectedItem(null);
+      });
   };
 
   const filteredColors = useMemo(() => {
@@ -183,6 +229,7 @@ export default function BillPrint() {
                     <th className="text-right pb-2">Qty</th>
                     <th className="text-right pb-2">Rate</th>
                     <th className="text-right pb-2">Amount</th>
+                    {editMode && <th className="text-right pb-2">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -194,6 +241,18 @@ export default function BillPrint() {
                       <td className="py-3 text-right">{item.quantity}</td>
                       <td className="py-3 text-right">Rs. {Math.round(parseFloat(item.rate))}</td>
                       <td className="py-3 text-right font-bold">Rs. {Math.round(parseFloat(item.subtotal))}</td>
+                      {editMode && (
+                        <td className="py-3 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditItem(item)}
+                          >
+                            <Edit className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -236,8 +295,6 @@ export default function BillPrint() {
           <div className="text-center">
             <h1 className="font-bold text-lg">ALI MUHAMMAD PAINTS</h1>
             <p>Basti Malook, Multan. 0300-868-3395</p>
-           
-           
           </div>
 
           <div className="my-3 border-t border-dotted border-black pt-2">
@@ -247,34 +304,53 @@ export default function BillPrint() {
             <p>Phone: {sale.customerPhone}</p>
           </div>
 
-          <table className="w-full">
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-black">
-                <th className="text-left">#</th>
-                <th className="text-left">Item</th>
-                <th className="text-right">Qty</th>
-                <th className="text-right">price</th>
-                <th className="text-right">Amt</th>
+                <th className="text-left py-1">Item</th>
+                <th className="text-right py-1">Qty</th>
+                <th className="text-right py-1">Price</th>
+                <th className="text-right py-1">Amount</th>
               </tr>
             </thead>
             <tbody>
-              {sale.saleItems.map((item, i) => (
-                <tr key={item.id}>
-                  <td>{i + 1}</td>
-                  <td className="py-1">
-                    <div className="font-medium">
-                      {item.color.colorName} {item.color.colorCode} - {item.color.variant.packingSize}
+              {sale.saleItems.map((item) => (
+                <tr key={item.id} className="border-b border-gray-200 last:border-none">
+                  <td className="py-1 pr-2 align-top">
+                    <div className="font-medium text-gray-900">
+                      {item.color.colorName}
+                    </div>
+                    <div className="text-gray-500 text-xs">
+                      {item.color.colorCode} • {item.color.variant.packingSize}
                     </div>
                   </td>
-                  <td className="text-right py-1">{item.quantity}</td>
-                  <td className="text-right py-1">{Math.round(parseFloat(item.rate))}</td>
-                  <td className="text-right font-bold py-1">{Math.round(parseFloat(item.subtotal))}</td>
+                  <td className="text-right py-1 align-top">{item.quantity}</td>
+                  <td className="text-right py-1 align-top">
+                    {Math.round(parseFloat(item.rate))}
+                  </td>
+                  <td className="text-right font-semibold py-1 align-top">
+                    {Math.round(parseFloat(item.subtotal))}
+                  </td>
                 </tr>
               ))}
             </tbody>
+
+            {/* Footer totals */}
+            <tfoot>
+              <tr className="border-t border-black font-semibold">
+                <td className="py-2 text-left">
+                  {sale.saleItems.length} Item{sale.saleItems.length > 1 ? "s" : ""}
+                </td>
+                <td className="text-right py-2">
+                  {sale.saleItems.reduce((sum, i) => sum + i.quantity, 0)}
+                </td>
+                <td></td>
+                <td></td>
+              </tr>
+            </tfoot>
           </table>
 
-          <div className="border-t border-black mt-3 pt-2">
+          <div>
             <div className="flex flex-col items-end text-right space-y-1">
               <div className="flex justify-between w-48">
                 <span className="font-bold w-24 text-right">Total:</span>
@@ -304,7 +380,7 @@ export default function BillPrint() {
         </div>
       </div>
 
-      {/* Delete Dialog */}
+      {/* Delete Bill Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Delete Bill?</DialogTitle></DialogHeader>
@@ -357,6 +433,71 @@ export default function BillPrint() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddItemDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleAddItem} disabled={!selectedColor}>Add Item</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Item Dialog */}
+      <Dialog open={editItemDialogOpen} onOpenChange={setEditItemDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+          </DialogHeader>
+
+          {selectedItem && (
+            <div className="space-y-4">
+              <div>
+                <p className="font-semibold">{getProductLine(selectedItem)}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedItem.color.variant.product.company} • {selectedItem.color.variant.product.productName}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={e => setQuantity(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <Label htmlFor="rate">Rate (Rs.)</Label>
+                <Input
+                  id="rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={rate}
+                  onChange={e => setRate(e.target.value)}
+                />
+              </div>
+
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">Subtotal: Rs. {(parseFloat(rate || "0") * parseInt(quantity || "0")).toFixed(2)}</p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex justify-between">
+            <Button 
+              variant="destructive" 
+              onClick={() => selectedItem && handleDeleteItem(selectedItem.id)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Item
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditItemDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateItem}>
+                Update Item
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
