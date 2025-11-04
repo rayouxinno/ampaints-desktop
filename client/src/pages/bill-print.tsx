@@ -212,9 +212,14 @@ export default function BillPrint() {
   const outstanding = parseFloat(sale.totalAmount) - parseFloat(sale.amountPaid);
   const isPaid = sale.paymentStatus === "paid";
 
-  // Helper: One Line Product Name
+  // Helper: One Line Product Name (UPDATED TO INCLUDE PRODUCT NAME BEFORE COLOR CODE)
   const getProductLine = (item: any) => {
-    return `${item.color.colorName} ${item.color.colorCode} - ${item.color.variant.packingSize}`;
+    return `${item.color.variant.product.productName} - ${item.color.colorName} ${item.color.colorCode} - ${item.color.variant.packingSize}`;
+  };
+
+  // Helper: Short Product Name for Receipt (UPDATED TO INCLUDE PRODUCT NAME)
+  const getShortProductLine = (item: any) => {
+    return `${item.color.variant.product.productName} - ${item.color.colorName}`;
   };
 
   return (
@@ -388,7 +393,7 @@ export default function BillPrint() {
         </Card>
       </div>
 
-      {/* PRINT ONLY: Thermal Receipt - UPDATED WITH LARGER FONT FOR TOTALS */}
+      {/* PRINT ONLY: Thermal Receipt - UPDATED WITH PRODUCT NAME AND LARGER FONT FOR TOTALS */}
       <div className="hidden print:block font-mono text-xs leading-tight">
         <div className="w-[80mm] mx-auto p-4 bg-white">
           <div className="text-center">
@@ -417,7 +422,8 @@ export default function BillPrint() {
                 <tr key={item.id} className="border-b border-gray-200 last:border-none">
                   <td className="py-1 pr-2 align-top">
                     <div className="font-medium text-gray-900" style={{color: 'black', fontWeight: 'bold'}}>
-                      {item.color.colorName}
+                      {/* UPDATED: Show product name before color name */}
+                      {item.color.variant.product.productName} - {item.color.colorName}
                     </div>
                     <div className="text-gray-500 text-xs" style={{color: 'black', fontWeight: 'bold'}}>
                       {item.color.colorCode} • {item.color.variant.packingSize}
@@ -510,7 +516,8 @@ export default function BillPrint() {
               >
                 <div className="flex justify-between">
                   <div>
-                    <p className="font-semibold">{c.colorName} {c.colorCode} - {c.variant.packingSize}</p>
+                    {/* UPDATED: Show product name before color name */}
+                    <p className="font-semibold">{c.variant.product.productName} - {c.colorName} {c.colorCode} - {c.variant.packingSize}</p>
                     <p className="text-sm text-muted-foreground">
                       {c.variant.product.company} • {c.variant.product.productName}
                     </p>
