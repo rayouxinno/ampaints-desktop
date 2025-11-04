@@ -545,13 +545,16 @@ export default function BillPrint() {
       <style jsx>{`
         @media print {
           @page { 
-            margin: 2mm;
             size: 82mm auto;
+            margin: 0; /* 🔥 No top/bottom/left/right margin */
           }
           body { 
             margin: 0;
-            padding: 2mm;
-            font-family: 'Courier New', monospace; 
+            padding: 0; /* 🔥 No top padding either */
+            font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
+            transform: scale(0.8);
+            transform-origin: top left;
+            width: 125%;
             font-size: 11px;
             font-weight: bold;
             color: black !important;
@@ -570,6 +573,7 @@ export default function BillPrint() {
           }
         }
       `}</style>
+
     </>
   );
 }
