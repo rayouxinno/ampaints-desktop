@@ -90,7 +90,7 @@ export default function BillPrint() {
   // Start Edit Mode
   const startEditMode = () => {
     if (!sale) return;
-    
+
     const initialEditingState: { [key: number]: { quantity: string; rate: string } } = {};
     sale.saleItems.forEach(item => {
       initialEditingState[item.id] = {
@@ -98,7 +98,7 @@ export default function BillPrint() {
         rate: item.rate.toString()
       };
     });
-    
+
     setEditingItems(initialEditingState);
     setEditMode(true);
   };
@@ -177,7 +177,7 @@ export default function BillPrint() {
       await apiRequest("DELETE", `/api/sale-items/${itemId}`);
       await queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
       toast({ title: `${itemName} deleted` });
-      
+
       // Remove from editing state if exists
       setEditingItems(prev => {
         const newState = { ...prev };
@@ -275,7 +275,6 @@ export default function BillPrint() {
         <Card className="print:hidden">
           <CardContent className="p-8 space-y-6">
             <div className="text-center border-b pb-4">
-             
               <p className="text-xs mt-1">Invoice: {sale.id.slice(0, 8).toUpperCase()}</p>
             </div>
 
@@ -384,28 +383,27 @@ export default function BillPrint() {
             </div>
 
             <div className="text-center border-t pt-4">
-              
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* PRINT ONLY: Thermal Receipt - EXACTLY SAME AS BEFORE */}
+      {/* PRINT ONLY: Thermal Receipt - UPDATED WITH LARGER FONT FOR TOTALS */}
       <div className="hidden print:block font-mono text-xs leading-tight">
         <div className="w-[80mm] mx-auto p-4 bg-white">
           <div className="text-center">
-            <h1 className="font-bold text-lg">ALI MUHAMMAD PAINTS</h1>
-            <p>Basti Malook, Multan. 0300-868-3395</p>
+            <h1 className="font-bold text-lg" style={{fontSize: '18px', fontWeight: 'bold', color: 'black'}}>ALI MUHAMMAD PAINTS</h1>
+            <p style={{color: 'black', fontWeight: 'bold'}}>Basti Malook, Multan. 0300-868-3395</p>
           </div>
 
-          <div className="my-3 border-t border-dotted border-black pt-2">
-            <p className="mt-2">Invoice: {sale.id.slice(0, 8).toUpperCase()}</p>
-            <p>{formatDate(sale.createdAt)} {new Date(sale.createdAt).toLocaleTimeString()}</p>
-            <p>Customer: {sale.customerName}</p>
-            <p>Phone: {sale.customerPhone}</p>
+          <div className="my-3 border-t border-dotted border-black pt-2" style={{color: 'black'}}>
+            <p className="mt-2" style={{fontWeight: 'bold'}}>Invoice: {sale.id.slice(0, 8).toUpperCase()}</p>
+            <p style={{fontWeight: 'bold'}}>{formatDate(sale.createdAt)} {new Date(sale.createdAt).toLocaleTimeString()}</p>
+            <p style={{fontWeight: 'bold'}}>Customer: {sale.customerName}</p>
+            <p style={{fontWeight: 'bold'}}>Phone: {sale.customerPhone}</p>
           </div>
 
-          <table className="w-full border-collapse text-sm">
+          <table className="w-full border-collapse text-sm" style={{color: 'black', fontWeight: 'bold'}}>
             <thead>
               <tr className="border-b border-black">
                 <th className="text-left py-1">Item</th>
@@ -418,18 +416,18 @@ export default function BillPrint() {
               {sale.saleItems.map((item) => (
                 <tr key={item.id} className="border-b border-gray-200 last:border-none">
                   <td className="py-1 pr-2 align-top">
-                    <div className="font-medium text-gray-900">
+                    <div className="font-medium text-gray-900" style={{color: 'black', fontWeight: 'bold'}}>
                       {item.color.colorName}
                     </div>
-                    <div className="text-gray-500 text-xs">
+                    <div className="text-gray-500 text-xs" style={{color: 'black', fontWeight: 'bold'}}>
                       {item.color.colorCode} • {item.color.variant.packingSize}
                     </div>
                   </td>
-                  <td className="text-right py-1 align-top">{item.quantity}</td>
-                  <td className="text-right py-1 align-top">
+                  <td className="text-right py-1 align-top" style={{color: 'black', fontWeight: 'bold'}}>{item.quantity}</td>
+                  <td className="text-right py-1 align-top" style={{color: 'black', fontWeight: 'bold'}}>
                     {Math.round(parseFloat(item.rate))}
                   </td>
-                  <td className="text-right font-semibold py-1 align-top">
+                  <td className="text-right font-semibold py-1 align-top" style={{color: 'black', fontWeight: 'bold'}}>
                     {Math.round(parseFloat(item.subtotal))}
                   </td>
                 </tr>
@@ -439,10 +437,10 @@ export default function BillPrint() {
             {/* Footer totals */}
             <tfoot>
               <tr className="border-t border-black font-semibold">
-                <td className="py-2 text-left">
+                <td className="py-2 text-left" style={{color: 'black', fontWeight: 'bold'}}>
                   {sale.saleItems.length} Item{sale.saleItems.length > 1 ? "s" : ""}
                 </td>
-                <td className="text-right py-2">
+                <td className="text-right py-2" style={{color: 'black', fontWeight: 'bold'}}>
                   {sale.saleItems.reduce((sum, i) => sum + i.quantity, 0)}
                 </td>
                 <td></td>
@@ -451,31 +449,36 @@ export default function BillPrint() {
             </tfoot>
           </table>
 
-          <div>
-            <div className="flex flex-col items-end text-right space-y-1">
-              <div className="flex justify-between w-48">
+          {/* UPDATED: Larger font size for totals */}
+          <div style={{color: 'black', fontWeight: 'bold'}}>
+            <div className="flex flex-col items-end text-right space-y-2 mt-3">
+              <div className="flex justify-between w-48" style={{fontSize: '13px', fontWeight: 'bold'}}>
                 <span className="font-bold w-24 text-right">Total:</span>
-                <span className="w-24 text-right">{Math.round(parseFloat(sale.totalAmount))}</span>
+                <span className="w-24 text-right" style={{fontSize: '13px', fontWeight: 'bold'}}>{Math.round(parseFloat(sale.totalAmount))}</span>
               </div>
-              <div className="flex justify-between w-48">
+              <div className="flex justify-between w-48" style={{fontSize: '13px', fontWeight: 'bold'}}>
                 <span className="w-24 text-right">Paid:</span>
-                <span className="w-24 text-right">{Math.round(parseFloat(sale.amountPaid))}</span>
+                <span className="w-24 text-right" style={{fontSize: '13px', fontWeight: 'bold'}}>{Math.round(parseFloat(sale.amountPaid))}</span>
               </div>
               {outstanding > 0 && (
-                <div className="flex justify-between w-48 font-bold">
+                <div className="flex justify-between w-48 font-bold" style={{fontSize: '13px', fontWeight: 'bold'}}>
                   <span className="w-24 text-right">Balance:</span>
-                  <span className="w-24 text-right">{Math.round(outstanding)}</span>
+                  <span className="w-24 text-right" style={{fontSize: '13px', fontWeight: 'bold'}}>{Math.round(outstanding)}</span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="text-center mt-4 border-t border-black pt-2">
-            <p className="text-[9px] mt-1 font-bold uppercase">
-              Authorized Dealer:
+          {/* UPDATED FOOTER - Increased font size and bold ICI-DULUX */}
+          <div className="text-center mt-4 border-t border-black pt-2" style={{color: 'black'}}>
+            <p className="text-[11px] mt-1 font-bold uppercase" style={{fontSize: '11px', fontWeight: 'bold'}}>
+              AUTHORIZED DEALER:
             </p>
-            <p className="text-[9px] font-semibold">
-              DULUX • MOBI PAINTS • WESTER 77
+            <p className="text-[12px] font-bold" style={{fontSize: '12px', fontWeight: 'bold'}}>
+              ICI-DULUX • MOBI PAINTS • WESTER 77
+            </p>
+            <p className="text-[12px] mt-3 font-bold" style={{fontSize: '12px', fontWeight: 'bold', marginTop: '8px'}}>
+              THANKS FOR YOUR BUSINESS
             </p>
           </div>
         </div>
@@ -538,12 +541,33 @@ export default function BillPrint() {
         </DialogContent>
       </Dialog>
 
-      {/* Print CSS - EXACTLY SAME AS BEFORE */}
+      {/* Print CSS - UPDATED FOR BETTER QUALITY */}
       <style jsx>{`
         @media print {
-          @page { margin: 0; size: 80mm auto; }
-          body { padding: 3mm; font-family: 'Courier New', monospace; font-size: 10px; }
-          .no-print, dialog, button { display: none !important; }
+          @page { 
+            margin: 2mm;
+            size: 82mm auto;
+          }
+          body { 
+            margin: 0;
+            padding: 2mm;
+            font-family: 'Courier New', monospace; 
+            font-size: 11px;
+            font-weight: bold;
+            color: black !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .no-print, dialog, button { 
+            display: none !important; 
+          }
+          * {
+            color: black !important;
+            font-weight: bold;
+          }
+          table {
+            font-weight: bold;
+          }
         }
       `}</style>
     </>
