@@ -3,7 +3,7 @@ import { useRoute } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Receipt, MoreVertical, Edit, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Receipt, MoreVertical, Edit, Plus, Trash2, Save, X } from "lucide-react";
 import { Link } from "wouter";
 import type { SaleWithItems, ColorWithVariantAndProduct, SaleItem } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,12 +33,10 @@ export default function BillPrint() {
   const [editMode, setEditMode] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
-  const [editItemDialogOpen, setEditItemDialogOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState<ColorWithVariantAndProduct | null>(null);
-  const [selectedItem, setSelectedItem] = useState<SaleItem | null>(null);
   const [quantity, setQuantity] = useState("1");
-  const [rate, setRate] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingItems, setEditingItems] = useState<{ [key: number]: { quantity: string; rate: string } }>({});
 
   const { data: sale, isLoading } = useQuery<SaleWithItems>({
     queryKey: ["/api/sales", saleId],
@@ -89,47 +87,107 @@ export default function BillPrint() {
     });
   };
 
-  // Edit Item
-  const handleEditItem = (item: SaleItem) => {
-    setSelectedItem(item);
-    setQuantity(item.quantity.toString());
-    setRate(item.rate.toString());
-    setEditItemDialogOpen(true);
-  };
-
-  // Update Item
-  const handleUpdateItem = () => {
-    if (!selectedItem) return;
-
-    const qty = parseInt(quantity);
-    const itemRate = parseFloat(rate);
-
-    if (qty < 1) return toast({ title: "Invalid quantity", variant: "destructive" });
-    if (itemRate < 0) return toast({ title: "Invalid rate", variant: "destructive" });
-
-    apiRequest("PATCH", `/api/sale-items/${selectedItem.id}`, {
-      quantity: qty,
-      rate: itemRate,
-      subtotal: itemRate * qty,
-    }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
-      toast({ title: "Item updated" });
-      setEditItemDialogOpen(false);
-      setSelectedItem(null);
-      setQuantity("1");
-      setRate("");
+  // Start Edit Mode
+  const startEditMode = () => {
+    if (!sale) return;
+    
+    const initialEditingState: { [key: number]: { quantity: string; rate: string } } = {};
+    sale.saleItems.forEach(item => {
+      initialEditingState[item.id] = {
+        quantity: item.quantity.toString(),
+        rate: item.rate.toString()
+      };
     });
+    
+    setEditingItems(initialEditingState);
+    setEditMode(true);
   };
 
-  // Delete Item
-  const handleDeleteItem = (itemId: number) => {
-    apiRequest("DELETE", `/api/sale-items/${itemId}`)
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
-        toast({ title: "Item deleted" });
-        setEditItemDialogOpen(false);
-        setSelectedItem(null);
+  // Cancel Edit Mode
+  const cancelEditMode = () => {
+    setEditingItems({});
+    setEditMode(false);
+  };
+
+  // Update Item Field
+  const updateEditingItem = (itemId: number, field: 'quantity' | 'rate', value: string) => {
+    setEditingItems(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [field]: value
+      }
+    }));
+  };
+
+  // Save All Changes
+  const saveAllChanges = async () => {
+    if (!sale) return;
+
+    try {
+      let hasChanges = false;
+
+      // Update existing items
+      for (const item of sale.saleItems) {
+        const editingItem = editingItems[item.id];
+        if (!editingItem) continue;
+
+        const newQuantity = parseInt(editingItem.quantity);
+        const newRate = parseFloat(editingItem.rate);
+
+        if (isNaN(newQuantity) || newQuantity < 1) {
+          toast({ title: `Invalid quantity for ${item.color.colorName}`, variant: "destructive" });
+          return;
+        }
+
+        if (isNaN(newRate) || newRate < 0) {
+          toast({ title: `Invalid rate for ${item.color.colorName}`, variant: "destructive" });
+          return;
+        }
+
+        // Only update if changed
+        if (newQuantity !== item.quantity || newRate !== parseFloat(item.rate)) {
+          hasChanges = true;
+          await apiRequest("PATCH", `/api/sale-items/${item.id}`, {
+            quantity: newQuantity,
+            rate: newRate,
+            subtotal: newRate * newQuantity,
+          });
+        }
+      }
+
+      if (hasChanges) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+        toast({ title: "All changes saved" });
+      } else {
+        toast({ title: "No changes to save" });
+      }
+
+      setEditMode(false);
+      setEditingItems({});
+    } catch (error) {
+      console.error("Error saving changes:", error);
+      toast({ title: "Failed to save changes", variant: "destructive" });
+    }
+  };
+
+  // Delete Individual Item
+  const deleteItem = async (itemId: number, itemName: string) => {
+    try {
+      await apiRequest("DELETE", `/api/sale-items/${itemId}`);
+      await queryClient.invalidateQueries({ queryKey: ["/api/sales", saleId] });
+      toast({ title: `${itemName} deleted` });
+      
+      // Remove from editing state if exists
+      setEditingItems(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
       });
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      toast({ title: "Failed to delete item", variant: "destructive" });
+    }
   };
 
   const filteredColors = useMemo(() => {
@@ -178,24 +236,37 @@ export default function BillPrint() {
             </Button>
 
             {!isPaid && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setEditMode(!editMode)}>
-                    <Edit className="h-4 w-4 mr-2" /> {editMode ? "Done" : "Edit"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAddItemDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" /> Add Item
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="text-red-600">
-                    <Trash2 className="h-4 w-4 mr-2" /> Delete Bill
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex gap-2">
+                {editMode ? (
+                  <>
+                    <Button variant="outline" onClick={cancelEditMode}>
+                      <X className="h-4 w-4 mr-2" /> Cancel
+                    </Button>
+                    <Button onClick={saveAllChanges}>
+                      <Save className="h-4 w-4 mr-2" /> Save Changes
+                    </Button>
+                  </>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={startEditMode}>
+                        <Edit className="h-4 w-4 mr-2" /> Edit Bill
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setAddItemDialogOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" /> Add Item
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="text-red-600">
+                        <Trash2 className="h-4 w-4 mr-2" /> Delete Bill
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -204,8 +275,7 @@ export default function BillPrint() {
         <Card className="print:hidden">
           <CardContent className="p-8 space-y-6">
             <div className="text-center border-b pb-4">
-              <h1 className="text-2xl font-bold">A.M PAINTS</h1>
-              <p className="text-sm text-muted-foreground">Basti Malook, Multan | 0300-8683395</p>
+             
               <p className="text-xs mt-1">Invoice: {sale.id.slice(0, 8).toUpperCase()}</p>
             </div>
 
@@ -217,9 +287,13 @@ export default function BillPrint() {
             </div>
 
             <div className="border-t pt-4">
-              <h2 className="font-semibold mb-3 flex justify-between">
+              <h2 className="font-semibold mb-3 flex justify-between items-center">
                 <span>Items</span>
-                {editMode && <Badge variant="secondary">Edit Mode</Badge>}
+                {editMode && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Edit className="h-3 w-3" /> Edit Mode
+                  </Badge>
+                )}
               </h2>
 
               <table className="w-full text-sm">
@@ -238,18 +312,45 @@ export default function BillPrint() {
                       <td className="py-3 font-medium">
                         {getProductLine(item)}
                       </td>
-                      <td className="py-3 text-right">{item.quantity}</td>
-                      <td className="py-3 text-right">Rs. {Math.round(parseFloat(item.rate))}</td>
-                      <td className="py-3 text-right font-bold">Rs. {Math.round(parseFloat(item.subtotal))}</td>
+                      <td className="py-3 text-right">
+                        {editMode ? (
+                          <Input
+                            type="number"
+                            min="1"
+                            value={editingItems[item.id]?.quantity || item.quantity}
+                            onChange={(e) => updateEditingItem(item.id, 'quantity', e.target.value)}
+                            className="w-20 text-right ml-auto"
+                          />
+                        ) : (
+                          item.quantity
+                        )}
+                      </td>
+                      <td className="py-3 text-right">
+                        {editMode ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={editingItems[item.id]?.rate || item.rate}
+                            onChange={(e) => updateEditingItem(item.id, 'rate', e.target.value)}
+                            className="w-24 text-right ml-auto"
+                          />
+                        ) : (
+                          `Rs. ${Math.round(parseFloat(item.rate))}`
+                        )}
+                      </td>
+                      <td className="py-3 text-right font-bold">
+                        Rs. {Math.round(parseFloat(item.subtotal))}
+                      </td>
                       {editMode && (
                         <td className="py-3 text-right">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleEditItem(item)}
+                            onClick={() => deleteItem(item.id, item.color.colorName)}
+                            className="text-red-600 hover:text-red-700"
                           >
-                            <Edit className="h-3 w-3 mr-1" />
-                            Edit
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </td>
                       )}
@@ -283,13 +384,13 @@ export default function BillPrint() {
             </div>
 
             <div className="text-center border-t pt-4">
-              <p className="font-medium">Thank you!</p>
+              
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* PRINT ONLY: Thermal Receipt */}
+      {/* PRINT ONLY: Thermal Receipt - EXACTLY SAME AS BEFORE */}
       <div className="hidden print:block font-mono text-xs leading-tight">
         <div className="w-[80mm] mx-auto p-4 bg-white">
           <div className="text-center">
@@ -437,72 +538,7 @@ export default function BillPrint() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Item Dialog */}
-      <Dialog open={editItemDialogOpen} onOpenChange={setEditItemDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Item</DialogTitle>
-          </DialogHeader>
-
-          {selectedItem && (
-            <div className="space-y-4">
-              <div>
-                <p className="font-semibold">{getProductLine(selectedItem)}</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedItem.color.variant.product.company} • {selectedItem.color.variant.product.productName}
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  value={quantity}
-                  onChange={e => setQuantity(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="rate">Rate (Rs.)</Label>
-                <Input
-                  id="rate"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={rate}
-                  onChange={e => setRate(e.target.value)}
-                />
-              </div>
-
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium">Subtotal: Rs. {(parseFloat(rate || "0") * parseInt(quantity || "0")).toFixed(2)}</p>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="flex justify-between">
-            <Button 
-              variant="destructive" 
-              onClick={() => selectedItem && handleDeleteItem(selectedItem.id)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Item
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setEditItemDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateItem}>
-                Update Item
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Print CSS */}
+      {/* Print CSS - EXACTLY SAME AS BEFORE */}
       <style jsx>{`
         @media print {
           @page { margin: 0; size: 80mm auto; }
