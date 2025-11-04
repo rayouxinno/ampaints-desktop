@@ -198,7 +198,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const sales = await storage.getSales();
       
-      // Group sales by customer phone and get latest data
       const customerMap = new Map();
       
       sales.forEach(sale => {
@@ -219,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const suggestions = Array.from(customerMap.values())
         .sort((a, b) => new Date(b.lastSaleDate).getTime() - new Date(a.lastSaleDate).getTime())
-        .slice(0, 10); // Return top 10 recent customers
+        .slice(0, 10);
       
       res.json(suggestions);
     } catch (error) {
@@ -234,26 +233,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("Creating sale - request body:", JSON.stringify(req.body, null, 2));
 
-      // Validate sale data
       const validatedSale = insertSaleSchema.parse(saleData);
-
-      // Validate sale items
       const validatedItems = z.array(insertSaleItemSchema).parse(items);
 
-      // Check if this is an unpaid sale and customer has existing unpaid bill
       if (validatedSale.paymentStatus === "unpaid") {
         const existingUnpaidSale = await storage.findUnpaidSaleByPhone(validatedSale.customerPhone);
         
         if (existingUnpaidSale) {
-          // Add items to existing unpaid bill instead of creating new sale
           console.log("Found existing unpaid bill, adding items to it:", existingUnpaidSale.id);
           
-          // Add all items to the existing sale
           for (const item of validatedItems) {
             await storage.addSaleItem(existingUnpaidSale.id, item);
           }
           
-          // Fetch the updated sale to return
           const updatedSale = await storage.getSale(existingUnpaidSale.id);
           console.log("Items added to existing unpaid bill successfully");
           
@@ -262,7 +254,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Create new sale with items (if not unpaid or no existing unpaid bill)
       const sale = await storage.createSale(validatedSale, validatedItems);
       
       console.log("Sale created successfully:", JSON.stringify(sale, null, 2));
@@ -306,6 +297,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error adding sale item:", error);
         res.status(500).json({ error: "Failed to add sale item" });
       }
+    }
+  });
+
+  // UPDATE SALE ITEM ENDPOINT - ADD THIS
+  app.patch("/api/sale-items/:id", async (req, res) => {
+    try {
+      const { quantity, rate, subtotal } = req.body;
+      
+      if (typeof quantity !== "number" || quantity <= 0) {
+        res.status(400).json({ error: "Invalid quantity" });
+        return;
+      }
+      
+      if (typeof rate !== "number" || rate <= 0) {
+        res.status(400).json({ error: "Invalid rate" });
+        return;
+      }
+
+      const saleItem = await storage.updateSaleItem(req.params.id, {
+        quantity,
+        rate,
+        subtotal: rate * quantity
+      });
+      
+      res.json(saleItem);
+    } catch (error) {
+      console.error("Error updating sale item:", error);
+      res.status(500).json({ error: "Failed to update sale item" });
     }
   });
 
